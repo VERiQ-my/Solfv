@@ -43,7 +43,12 @@ if ($localHead -ne $remoteHead) {
 }
 
 $targetEngineTree = (git rev-parse HEAD:engine).Trim()
-$deployedEngineTree = (docker inspect --format '{{ index .Config.Labels "solfv.engine.tree" }}' solfv-engine 2>$null).Trim()
+$deployedLabels = docker inspect --format '{{json .Config.Labels}}' solfv-engine 2>$null
+$deployedEngineTree = if ($deployedLabels) {
+  (($deployedLabels | ConvertFrom-Json).'solfv.engine.tree').Trim()
+} else {
+  ''
+}
 if ($targetEngineTree -eq $deployedEngineTree) {
   Write-Host 'SOLFV engine is already current.'
   exit 0
