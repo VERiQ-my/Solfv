@@ -15,6 +15,12 @@ import type { Verdict } from '../types'
 
 const ORDER: Verdict[] = ['CONTRADICTED', 'UNVERIFIABLE', 'SUPPORTED']
 
+const VERDICT_EDGE: Record<Verdict, string> = {
+  CONTRADICTED: 'border-l-danger',
+  UNVERIFIABLE: 'border-l-outline-variant',
+  SUPPORTED: 'border-l-success',
+}
+
 export default function SayDo() {
   const { analysis } = useSession()
   if (!analysis) return null
@@ -25,22 +31,26 @@ export default function SayDo() {
   const tally = (verdict: Verdict) => gaps.filter(g => g.verdict === verdict).length
 
   return (
-    <div className="content">
+    <div className="space-y-xl">
       <PageIntro
-        eyebrow="FORENSIC NARRATIVE ANALYSIS"
+        eyebrow="Forensic narrative analysis"
         title="Say–Do Gap"
         lede="We read the management commentary, turn each assertion into a testable claim, and check it against the reconciled figures. This is what a forensic accountant does by hand."
       />
 
-      <section className="verdict-row">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-gutter">
         {ORDER.map(verdict => (
-          <article key={verdict} className={`verdict-tile verdict-${verdict.toLowerCase()}`}>
-            <StatusPill status={verdict} />
-            <strong>{tally(verdict)}</strong>
-            <p>{VERDICT_COPY[verdict]}</p>
+          <article key={verdict} className={`card card-hover border-l-4 ${VERDICT_EDGE[verdict]}`}>
+            <div className="card-body space-y-sm">
+              <StatusPill status={verdict} />
+              <strong className="mono block text-display-lg leading-none text-primary">
+                {tally(verdict)}
+              </strong>
+              <p className="text-body-sm text-on-surface-variant">{VERDICT_COPY[verdict]}</p>
+            </div>
           </article>
         ))}
-      </section>
+      </div>
 
       {gaps.length === 0 ? (
         <Card title="No claims tested" icon="balance">
@@ -51,32 +61,55 @@ export default function SayDo() {
           />
         </Card>
       ) : (
-        <div className="gap-list">
+        <div className="space-y-gutter">
           {gaps.map((gap, index) => (
-            <article key={index} className={`gap-card verdict-${gap.verdict.toLowerCase()}`}>
-              <header>
-                <div className="gap-meta">
+            <article
+              key={index}
+              className={`card card-hover border-l-4 ${VERDICT_EDGE[gap.verdict]}`}
+            >
+              <header className="card-header flex-wrap gap-sm">
+                <div className="flex flex-wrap items-center gap-sm min-w-0">
                   <StatusPill status={gap.verdict} />
-                  <span className="gap-metric">
+                  <span className="text-label-md uppercase text-on-surface-variant">
                     {RATIO_LABELS[gap.metric] || gap.metric.replace(/_/g, ' ')}
                   </span>
                   {gap.page != null && (
-                    <span className="gap-page"><Icon name="description" />page {gap.page}</span>
+                    <span className="inline-flex items-center gap-xs text-body-sm
+                                     text-on-surface-variant mono">
+                      <Icon name="description" className="text-[16px]" />page {gap.page}
+                    </span>
                   )}
                 </div>
-                <span className="gap-claimed">claimed “{gap.claimed}”</span>
+                <span className="text-body-sm text-on-surface-variant italic">
+                  claimed “{gap.claimed}”
+                </span>
               </header>
 
-              <div className="gap-body">
-                <div className="gap-said">
-                  <small>MANAGEMENT SAID</small>
-                  <blockquote>“{gap.sentence}”</blockquote>
+              <div className="card-body grid grid-cols-1 md:grid-cols-[1fr_auto_1fr]
+                              items-center gap-md">
+                <div className="min-w-0">
+                  <small className="eyebrow block mb-xs">Management said</small>
+                  <blockquote className="text-body-lg text-on-surface italic
+                                         border-l-2 border-hairline pl-md">
+                    “{gap.sentence}”
+                  </blockquote>
                 </div>
-                <div className="gap-arrow"><Icon name="arrow_forward" /></div>
-                <div className="gap-did">
-                  <small>THE NUMBERS SAY</small>
-                  <b className="mono">{gap.actual}</b>
-                  {gap.basis && <p>{gap.basis}</p>}
+
+                <div className="hidden md:flex h-9 w-9 shrink-0 items-center justify-center
+                                rounded-full bg-surface-container-high text-on-surface-variant">
+                  <Icon name="arrow_forward" className="text-[20px]" />
+                </div>
+
+                <div className="min-w-0 md:text-right">
+                  <small className="eyebrow block mb-xs">The numbers say</small>
+                  <b className={`mono block text-headline-md
+                    ${gap.verdict === 'CONTRADICTED' ? 'text-danger'
+                      : gap.verdict === 'SUPPORTED' ? 'text-success' : 'text-on-surface-variant'}`}>
+                    {gap.actual}
+                  </b>
+                  {gap.basis && (
+                    <p className="text-body-sm text-on-surface-variant mt-xs">{gap.basis}</p>
+                  )}
                 </div>
               </div>
             </article>
@@ -84,42 +117,44 @@ export default function SayDo() {
         </div>
       )}
 
-      <Card title="How a verdict is reached" icon="rule_settings" className="method-card">
-        <div className="method-grid">
-          <div>
-            <b>1 · The model reads, it does not judge</b>
-            <p>
-              Extraction turns a sentence into <code>{'{metric, direction}'}</code> and
-              stops there. It never sees a computed ratio, so it cannot talk itself
-              into agreeing with management.
-            </p>
-          </div>
-          <div>
-            <b>2 · The arithmetic decides</b>
-            <p>
-              A claim of “strong” liquidity is tested against a threshold; a claim of
-              “improving” is tested against the year-on-year move. Same input, same
-              verdict, every time.
-            </p>
-          </div>
-          <div>
-            <b>3 · Missing beats guessing</b>
-            <p>
-              When the metric is absent or quarantined, the row reads UNVERIFIABLE.
-              The engine never converts an absence into an accusation.
-            </p>
-          </div>
+      <Card title="How a verdict is reached" icon="rule_settings">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-lg">
+          {[
+            {
+              title: '1 · The model reads, it does not judge',
+              body: <>Extraction turns a sentence into <code className="mono text-secondary">{'{metric, direction}'}</code> and
+                stops there. It never sees a computed ratio, so it cannot talk itself into
+                agreeing with management.</>,
+            },
+            {
+              title: '2 · The arithmetic decides',
+              body: <>A claim of “strong” liquidity is tested against a threshold; a claim of
+                “improving” is tested against the year-on-year move. Same input, same verdict,
+                every time.</>,
+            },
+            {
+              title: '3 · Missing beats guessing',
+              body: <>When the metric is absent or quarantined, the row reads UNVERIFIABLE. The
+                engine never converts an absence into an accusation.</>,
+            },
+          ].map(item => (
+            <div key={item.title}>
+              <b className="block text-body-md text-primary">{item.title}</b>
+              <p className="text-body-sm text-on-surface-variant mt-xs">{item.body}</p>
+            </div>
+          ))}
         </div>
         {analysis.prior_period && (
-          <p className="method-foot">
+          <p className="mt-lg pt-md border-t border-hairline text-body-sm text-on-surface-variant">
             Year-on-year comparisons run {analysis.period} against {analysis.prior_period},
-            both read from the comparative columns printed in the same statements.
-            {' '}
-            {Object.entries(analysis.prior_ratios)
-              .filter(([, value]) => value != null)
-              .slice(0, 3)
-              .map(([key, value]) => `${RATIO_LABELS[key] ?? key} ${fmtRatio(key, value)}`)
-              .join(' · ')}
+            both read from the comparative columns printed in the same statements.{' '}
+            <span className="mono">
+              {Object.entries(analysis.prior_ratios)
+                .filter(([, value]) => value != null)
+                .slice(0, 3)
+                .map(([key, value]) => `${RATIO_LABELS[key] ?? key} ${fmtRatio(key, value)}`)
+                .join(' · ')}
+            </span>
           </p>
         )}
       </Card>

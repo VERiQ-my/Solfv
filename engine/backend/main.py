@@ -25,13 +25,15 @@ from pydantic import BaseModel
 from analysis.pipeline import analyse
 from analysis.query import resolve_query
 
-from . import extract, ingest, payment, privacy, session, store
+from . import extract, ingest, market, payment, privacy, session, store
 from .bbox import resolve_bboxes
 from .pages import resolve_pages
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
-# Printed on p.19 of the demo document's financial highlights.
+# Printed on p.19 of the demo document's financial highlights. Used only as the
+# fallback for the fixture path — a live feed supersedes it when one is
+# configured and the ticker resolves.
 DEMO_MARKET = {"market_cap": 133_760_000, "share_price_1y": 0.1944}
 
 app = FastAPI(title="SOLFV", version="1.0",
@@ -83,16 +85,52 @@ def _require(sid: str) -> dict:
     return record
 
 
-def _run(record: dict, extraction: dict, market: dict | None) -> dict:
+def _market_for(record: dict, extraction: dict, fallback: dict | None) -> dict | None:
+    """Live market data for the extracted ticker, falling back on demand.
+
+    The feed is enrichment, never a dependency: an unconfigured key, a rate
+    limit, a plan that does not cover the exchange, or an unknown ticker all
+    land on `fallback`, and `fallback` of None is itself a valid answer — the
+    pipeline then keeps Altman on Z'' and marks market-vs-narrative claims
+    UNVERIFIABLE rather than inventing a price.
+
+    A refusal is recorded as a session warning. Silently falling back would
+    leave the Z variant looking like a modelling choice rather than the
+    consequence of a missing feed.
+    """
+    ticker = (extraction or {}).get("ticker")
+    if not ticker or not market.configured():
+        return fallback
+
+    try:
+        data, reason = market.for_ticker(ticker)
+    except Exception as error:  # noqa: BLE001 - never fail a reconciliation
+        data, reason = None, str(error)
+
+    if data:
+        return data
+
+    if reason:
+        warnings = list(record.get("warnings") or [])
+        warnings.append(
+            f"Live market data for {ticker} was unavailable, so "
+            f"{'the demo figures were used' if fallback else 'the Z-score stays on the private-company variant'}"
+            f": {reason}"
+        )
+        session.update(record["session_id"], warnings=warnings)
+    return fallback
+
+
+def _run(record: dict, extraction: dict, market_data: dict | None) -> dict:
     """The single call into the Data lane. Result returned verbatim.
 
     The audit row is written after the analysis is already in the session, and
     a persistence failure is recorded as a warning rather than raised. Supabase
     being down must never cost the user their reconciliation.
     """
-    result = analyse(extraction, market, PEERS)
+    result = analyse(extraction, market_data, PEERS)
     session.update(record["session_id"], extraction=extraction, analysis=result,
-                   market=market)
+                   market=market_data)
 
     if store.configured():
         outcome = store.save(result, record, record.get("privacy_ledger"))
@@ -200,7 +238,9 @@ def _ingest_pdf(record: dict, path: pathlib.Path) -> dict:
         targeted_pages=targeted, warnings=warnings,
     )
     record = session.get(record["session_id"]) or record
-    _run(record, extraction, DEMO_MARKET)
+    # An uploaded report has no fixture behind it, so there is no fallback:
+    # either the feed resolves the ticker or the pipeline runs without market data.
+    _run(record, extraction, _market_for(record, extraction, None))
 
     return {
         **_envelope(record),
@@ -261,7 +301,7 @@ def demo(variant: str = "clean") -> JSONResponse:
     session.update(record["session_id"], privacy_ledger=ledger)
     record = session.get(record["session_id"]) or record
 
-    _run(record, extraction, DEMO_MARKET)
+    _run(record, extraction, _market_for(record, extraction, DEMO_MARKET))
     return JSONResponse({**_envelope(record), "privacy_ledger": ledger,
                          "targeted_pages": record.get("targeted_pages")})
 
@@ -376,6 +416,13 @@ def payment_quote() -> dict:
     return payment.quote()
 
 
+@app.get("/payment/network")
+def payment_network() -> dict:
+    """Live cluster state and treasury balance. Never raises — an unreachable
+    RPC comes back as `reachable: false` with the reason attached."""
+    return payment.network()
+
+
 @app.post("/payment/{sid}")
 def settle(sid: str, body: Settlement) -> JSONResponse:
     record = _require(sid)
@@ -399,6 +446,46 @@ def purge(sid: str) -> dict:
 @app.get("/session/{sid}")
 def describe(sid: str) -> dict:
     return _envelope(_require(sid))
+
+
+# ---------------------------------------------------------------------------
+# Market data (Twelve Data)
+#
+# Proxied rather than called from the browser on purpose: the key is billable,
+# and anything the frontend can read is a key that has already leaked.
+# ---------------------------------------------------------------------------
+
+@app.get("/market/status")
+def market_status() -> dict:
+    return market.status()
+
+
+@app.get("/market/search")
+def market_search(q: str, limit: int = 12) -> JSONResponse:
+    try:
+        return JSONResponse({"results": market.search(q, min(max(limit, 1), 30))})
+    except market.MarketError as error:
+        raise HTTPException(503, str(error)) from error
+
+
+@app.get("/market/quote")
+def market_quote(symbol: str, exchange: str | None = None) -> JSONResponse:
+    try:
+        return JSONResponse(market.quote(symbol, exchange))
+    except market.MarketError as error:
+        raise HTTPException(503, str(error)) from error
+
+
+@app.get("/market/timeseries")
+def market_timeseries(
+    symbol: str, interval: str = "1day", outputsize: int = 260,
+    exchange: str | None = None,
+) -> JSONResponse:
+    try:
+        return JSONResponse(
+            market.time_series(symbol, interval, outputsize, exchange))
+    except market.MarketError as error:
+        raise HTTPException(503, str(error)) from error
 
 
 # ---------------------------------------------------------------------------
@@ -428,6 +515,7 @@ def health() -> dict:
     return {
         "ok": True,
         "vision_configured": extract.available(),
+        "market_configured": market.configured(),
         "peers_loaded": bool(PEERS),
         "payment_required": payment.PAYMENT_REQUIRED,
         "demo_variants": sorted(extract.FIXTURE_FILES),

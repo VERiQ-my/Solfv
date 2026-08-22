@@ -6,14 +6,20 @@
  *  is the reason a ratio below it may be missing.
  */
 
-import { Card, Delta, Icon, PageIntro, SourceLink, Stat, StatusPill, ZoneTag } from '../components/ui'
-import { RATIO_LABELS, RATIO_ORDER, exact, money, ratio as fmtRatio, signed, yoy } from '../lib/format'
+import {
+  Card, Delta, Icon, SourceLink, Spotlight, SpotlightNote, Stat, StatusPill, ZoneTag,
+} from '../components/ui'
+import {
+  RATIO_LABELS, RATIO_ORDER, exact, money, ratio as fmtRatio, signed, yoy,
+} from '../lib/format'
+import { useNav } from '../nav'
 import { useSession } from '../state'
-import type { Analysis, Check, Page } from '../types'
+import type { Analysis, Check } from '../types'
 import type { Focus } from '../state'
 
-export default function Overview({ go }: { go: (page: Page) => void }) {
+export default function Overview() {
   const { analysis, setFocus } = useSession()
+  const { goTab } = useNav()
   if (!analysis) return null
 
   const { summary, checks, ratios, prior_ratios, risk, quarantined } = analysis
@@ -30,39 +36,54 @@ export default function Overview({ go }: { go: (page: Page) => void }) {
   }
   const trace = (key: string) => {
     const next = focusKey(key)
-    if (next) { setFocus(next); go('analysis') }
+    if (next) { setFocus(next); goTab('provenance') }
   }
 
+  const contradicted = analysis.say_do_gap.filter(g => g.verdict === 'CONTRADICTED')
+
   return (
-    <div className="content">
-      <PageIntro
-        eyebrow={[analysis.ticker, analysis.period].filter(Boolean).join(' · ')}
-        title={analysis.entity || 'Untitled document'}
-        lede={`${summary.line_item_count} figures extracted, reconciled against ${checks.length} accounting identities, and badged for trust before a single ratio was computed.`}
-      >
-        <button className="btn ghost" onClick={() => go('analysis')}>
-          <Icon name="fact_check" />Inspect figures
+    <div className="space-y-xl">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-md">
+        <div className="min-w-0">
+          <span className="eyebrow">
+            {[analysis.ticker, analysis.period].filter(Boolean).join(' · ') || 'Reconciled'}
+          </span>
+          <h2 className="text-headline-lg text-primary mt-xs truncate">
+            {analysis.entity || 'Untitled document'}
+          </h2>
+          <p className="text-body-md text-on-surface-variant mt-xs max-w-prose">
+            {summary.line_item_count} figures extracted, reconciled against {checks.length}{' '}
+            accounting identities, and badged for trust before a single ratio was computed.
+          </p>
+        </div>
+        <button className="btn-secondary shrink-0" onClick={() => goTab('provenance')}>
+          <Icon name="fact_check" className="text-[16px]" />Inspect figures
         </button>
-      </PageIntro>
+      </header>
 
       {failing.length > 0 && (
-        <div className="alert alert-fail">
-          <Icon name="gpp_bad" />
-          <div>
-            <b>{failing.length} reconciliation {failing.length === 1 ? 'check has' : 'checks have'} failed.</b>
-            <p>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-md p-md rounded-lg
+                        border border-danger/30 bg-danger/5">
+          <Icon name="gpp_bad" className="text-danger text-[24px] shrink-0" />
+          <div className="flex-1 min-w-0">
+            <b className="block text-body-md text-primary">
+              {failing.length} reconciliation {failing.length === 1 ? 'check has' : 'checks have'} failed.
+            </b>
+            <p className="text-body-sm text-on-surface-variant mt-xs">
               {quarantined.length} figure{quarantined.length === 1 ? '' : 's'} quarantined
               — {quarantined.map(k => k.replace(/_/g, ' ')).join(', ')}. Every ratio built
               on {quarantined.length === 1 ? 'it' : 'them'} is withheld rather than estimated.
             </p>
           </div>
-          <button className="btn danger" onClick={() => go('analysis')}>See the evidence</button>
+          <button className="btn-danger shrink-0" onClick={() => goTab('provenance')}>
+            See the evidence
+          </button>
         </div>
       )}
 
-      <section className="stat-row">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-gutter">
         <Stat
-          label="Reconciliation"
+          label="Reconciliation" icon="rule"
           value={`${summary.checks_passed}/${checks.length}`}
           tone={summary.checks_failed ? 'bad' : 'good'}
           hint={
@@ -72,86 +93,116 @@ export default function Overview({ go }: { go: (page: Page) => void }) {
           }
         />
         <Stat
-          label="Figures verified"
+          label="Figures verified" icon="verified"
           value={`${summary.trust.VERIFIED}/${summary.line_item_count}`}
           tone={summary.trust.UNVERIFIED ? 'warn' : 'good'}
           hint={`${summary.trust.DERIVED} derived · ${summary.trust.UNVERIFIED} unverified`}
         />
         <Stat
-          label={risk.variant ? `Altman ${risk.variant}` : 'Altman Z'}
+          label={risk.variant ? `Altman ${risk.variant}` : 'Altman Z'} icon="monitoring"
           value={risk.score != null ? risk.score.toFixed(2) : '—'}
-          tone={risk.zone === 'DISTRESS' ? 'bad' : risk.zone === 'GREY' ? 'warn' : risk.zone ? 'good' : 'muted'}
+          tone={risk.zone === 'DISTRESS' ? 'bad'
+            : risk.zone === 'GREY' ? 'warn' : risk.zone ? 'good' : 'muted'}
           hint={<ZoneTag zone={risk.zone} />}
         />
         <Stat
-          label="Narrative claims tested"
+          label="Narrative claims tested" icon="balance"
           value={String(analysis.say_do_gap.length)}
-          tone={analysis.say_do_gap.some(g => g.verdict === 'CONTRADICTED') ? 'bad' : 'muted'}
-          hint={`${analysis.say_do_gap.filter(g => g.verdict === 'CONTRADICTED').length} contradicted by the figures`}
+          tone={contradicted.length ? 'bad' : 'muted'}
+          hint={`${contradicted.length} contradicted by the figures`}
         />
-      </section>
+      </div>
 
-      <section className="split-2">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
         <Card
           title="Reconciliation engine"
           subtitle="Deterministic accounting identities. No model output reaches this panel unchecked."
           icon="rule"
-          action={<span className="card-tag">NO AI</span>}
+          action={<span className="badge-neutral">No AI</span>}
+          className="lg:col-span-8"
         >
-          <div className="check-list">
-            {checks.map(check => <CheckRow key={check.name} check={check} unit={analysis.unit} />)}
+          <div className="space-y-md">
+            {checks.map(check => (
+              <CheckRow key={check.name} check={check} unit={analysis.unit} />
+            ))}
           </div>
         </Card>
 
-        <Card
+        <Spotlight
           title="Say–Do Gap"
-          subtitle="Management's claims, tested against the figures."
           icon="balance"
-          action={<button className="btn text" onClick={() => go('saydo')}>All {analysis.say_do_gap.length}</button>}
+          className="lg:col-span-4"
+          footer={
+            <button
+              className="btn bg-on-primary text-primary hover:bg-surface-variant btn-full"
+              onClick={() => goTab('saydo')}
+            >
+              All {analysis.say_do_gap.length} claims
+            </button>
+          }
         >
           {analysis.say_do_gap.length === 0 ? (
-            <p className="muted-note">No narrative claims were extracted from this document.</p>
+            <p className="text-body-sm text-[rgb(190_198_224)]">
+              No narrative claims were extracted from this document.
+            </p>
           ) : (
-            <div className="gap-preview">
-              {analysis.say_do_gap.slice(0, 3).map((gap, index) => (
-                <article key={index} className={`gap-mini verdict-${gap.verdict.toLowerCase()}`}>
-                  <StatusPill status={gap.verdict} />
-                  <blockquote>“{gap.sentence}”</blockquote>
-                  <p className="mono">{gap.actual}</p>
-                </article>
-              ))}
-            </div>
+            analysis.say_do_gap.slice(0, 3).map((gap, index) => (
+              <SpotlightNote
+                key={index}
+                title={gap.verdict.replace('_', ' ')}
+                icon={gap.verdict === 'CONTRADICTED' ? 'warning'
+                  : gap.verdict === 'SUPPORTED' ? 'check_circle' : 'help'}
+                tone={gap.verdict === 'CONTRADICTED' ? 'bad'
+                  : gap.verdict === 'SUPPORTED' ? 'good' : 'neutral'}
+              >
+                <blockquote className="italic">“{gap.sentence}”</blockquote>
+                <p className="mono text-tertiary-fixed mt-xs">{gap.actual}</p>
+              </SpotlightNote>
+            ))
           )}
-        </Card>
-      </section>
+        </Spotlight>
+      </div>
 
       <Card
         title="Ratio pack"
+        icon="functions"
         subtitle={
           analysis.prior_period
             ? `${analysis.period} against ${analysis.prior_period}. A withheld ratio is one built on a quarantined figure.`
             : 'A withheld ratio is one whose inputs are missing or quarantined.'
         }
-        icon="functions"
       >
-        <div className="ratio-grid">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-md">
           {RATIO_ORDER.map(key => {
             const value = ratios[key]
             const move = yoy(key, ratios, prior_ratios)
             const withheld = value == null
             return (
-              <article key={key} className={`ratio-cell ${withheld ? 'withheld' : ''}`}>
-                <p>{RATIO_LABELS[key]}</p>
-                <strong className="mono">{fmtRatio(key, value)}</strong>
+              <article
+                key={key}
+                className={`p-md rounded-md border ${withheld
+                  ? 'border-dashed border-outline-variant bg-surface-container-low/50'
+                  : 'border-hairline bg-surface'}`}
+              >
+                <p className="text-body-sm text-on-surface-variant">{RATIO_LABELS[key]}</p>
+                <strong className={`mono block text-headline-md mt-xs
+                  ${withheld ? 'text-on-surface-variant' : 'text-primary'}`}>
+                  {fmtRatio(key, value)}
+                </strong>
                 {withheld ? (
-                  <span className="withheld-tag">
-                    <Icon name="block" />Withheld — built on a quarantined figure
+                  <span className="mt-sm inline-flex items-start gap-xs text-body-sm text-warning">
+                    <Icon name="block" className="text-[16px] shrink-0" />
+                    Withheld — built on a quarantined figure
                   </span>
                 ) : (
-                  <div className="ratio-foot">
-                    {move ? <Delta change={move.change} improved={move.improved} /> : <span className="muted">no comparative</span>}
+                  <div className="mt-sm flex items-center justify-between gap-sm">
+                    {move
+                      ? <Delta change={move.change} improved={move.improved} />
+                      : <span className="text-body-sm text-on-surface-variant">no comparative</span>}
                     {prior_ratios[key] != null && (
-                      <span className="muted mono">was {fmtRatio(key, prior_ratios[key])}</span>
+                      <span className="mono text-body-sm text-on-surface-variant">
+                        was {fmtRatio(key, prior_ratios[key])}
+                      </span>
                     )}
                   </div>
                 )}
@@ -161,48 +212,79 @@ export default function Overview({ go }: { go: (page: Page) => void }) {
         </div>
       </Card>
 
-      <section className="split-2">
-        <Card title="Balance sheet" subtitle="Click any figure to open its source cell." icon="account_balance">
-          <BalanceRows keys={[
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-gutter">
+        <Card
+          title="Balance sheet" icon="account_balance"
+          subtitle="Click any figure to open its source cell."
+          bodyClassName=""
+        >
+          <BalanceRows analysis={analysis} onTrace={trace} keys={[
             'total_assets', 'current_assets', 'cash', 'receivables', 'inventory',
             'total_liabilities', 'current_liabilities', 'total_equity', 'retained_earnings',
-          ]} analysis={analysis} onTrace={trace} />
+          ]} />
         </Card>
-        <Card title="Income & cash flow" subtitle="Click any figure to open its source cell." icon="payments">
-          <BalanceRows keys={[
+        <Card
+          title="Income & cash flow" icon="payments"
+          subtitle="Click any figure to open its source cell."
+          bodyClassName=""
+        >
+          <BalanceRows analysis={analysis} onTrace={trace} keys={[
             'revenue', 'cogs', 'gross_profit', 'opex', 'ebit',
             'interest_expense', 'pat', 'operating_cf',
-          ]} analysis={analysis} onTrace={trace} />
+          ]} />
         </Card>
-      </section>
+      </div>
     </div>
   )
+}
+
+const CHECK_TONE: Record<string, string> = {
+  PASS: 'border-hairline bg-surface',
+  FAIL: 'border-danger/30 bg-danger/5',
+  UNVERIFIABLE: 'border-dashed border-outline-variant bg-surface-container-low/50',
 }
 
 function CheckRow({ check, unit }: { check: Check; unit: string | null }) {
   const failed = check.status === 'FAIL'
   return (
-    <article className={`check check-${check.status.toLowerCase()}`}>
-      <header>
-        <b>{check.name}</b>
+    <article className={`p-md rounded-md border ${CHECK_TONE[check.status]}`}>
+      <header className="flex items-center justify-between gap-sm">
+        <b className="text-body-md text-primary">{check.name}</b>
         <StatusPill status={check.status} />
       </header>
-      <code>{check.formula}</code>
+      <code className="block mt-xs text-body-sm mono text-on-surface-variant break-words">
+        {check.formula}
+      </code>
+
       {check.expected != null && check.actual != null ? (
-        <div className="check-figures">
-          <div><small>EXPECTED</small><b className="mono">{exact(check.expected, unit)}</b></div>
-          <div><small>ACTUAL</small><b className="mono">{exact(check.actual, unit)}</b></div>
-          <div className={failed ? 'bad' : ''}>
-            <small>DELTA</small>
-            <b className="mono">{signed(check.delta)}</b>
-          </div>
+        <div className="grid grid-cols-3 gap-sm mt-sm">
+          {([
+            ['Expected', exact(check.expected, unit), false],
+            ['Actual', exact(check.actual, unit), false],
+            ['Delta', signed(check.delta), failed],
+          ] as const).map(([label, value, bad]) => (
+            <div key={label} className="rounded bg-surface-container-low p-sm">
+              <small className="eyebrow block">{label}</small>
+              <b className={`mono block mt-px ${bad ? 'text-danger' : 'text-primary'}`}>
+                {value}
+              </b>
+            </div>
+          ))}
         </div>
       ) : (
-        <p className="check-detail">{check.detail}</p>
+        <p className="text-body-sm text-on-surface-variant mt-sm">{check.detail}</p>
       )}
-      {check.expected != null && <p className="check-detail">{check.detail}</p>}
+      {check.expected != null && (
+        <p className="text-body-sm text-on-surface-variant mt-sm">{check.detail}</p>
+      )}
     </article>
   )
+}
+
+const TRUST_EDGE: Record<string, string> = {
+  VERIFIED: 'border-l-success',
+  DERIVED: 'border-l-secondary',
+  UNVERIFIED: 'border-l-warning',
 }
 
 function BalanceRows({
@@ -210,25 +292,40 @@ function BalanceRows({
 }: { keys: string[]; analysis: Analysis; onTrace: (key: string) => void }) {
   const byKey = new Map(analysis.line_items.map(item => [item.canonical_key, item]))
   return (
-    <div className="figure-rows">
+    <div className="divide-y divide-hairline">
       {keys.map(key => {
         const item = byKey.get(key)
         if (!item) {
           return (
-            <div className="figure-row absent" key={key}>
-              <span>{key.replace(/_/g, ' ')}</span>
-              <span className="muted">not in the document</span>
+            <div key={key} className="flex items-center justify-between gap-md px-lg py-sm
+                                      border-l-4 border-l-transparent">
+              <span className="text-body-md text-on-surface-variant capitalize">
+                {key.replace(/_/g, ' ')}
+              </span>
+              <span className="text-body-sm text-on-surface-variant italic">
+                not in the document
+              </span>
             </div>
           )
         }
         return (
-          <div className={`figure-row trust-row-${item.trust.toLowerCase()}`} key={key}>
-            <span className="figure-label">
-              {item.label_as_printed || key.replace(/_/g, ' ')}
-              {item.derived && <em className="derived-tag">{item.derivation}</em>}
+          <div
+            key={key}
+            className={`flex items-center justify-between gap-md px-lg py-sm border-l-4
+                        ${TRUST_EDGE[item.trust]}`}
+          >
+            <span className="text-body-md text-on-surface min-w-0">
+              <span className="block truncate">
+                {item.label_as_printed || key.replace(/_/g, ' ')}
+              </span>
+              {item.derived && (
+                <em className="block text-body-sm text-on-surface-variant not-italic mono">
+                  {item.derivation}
+                </em>
+              )}
             </span>
-            <SourceLink page={item.page} onClick={() => onTrace(key)}>
-              <span className="mono">{money(item.value, analysis.currency || 'MYR', analysis.unit)}</span>
+            <SourceLink page={item.page} onClick={() => onTrace(key)} className="shrink-0">
+              {money(item.value, analysis.currency || 'MYR', analysis.unit)}
             </SourceLink>
           </div>
         )

@@ -2,7 +2,8 @@
  *  single source of truth and reaches the components verbatim. */
 
 import type {
-  Analysis, HistoryResult, PaymentQuote, QueryResult, UploadResult,
+  Analysis, HistoryResult, MarketQuote, MarketSearchResult, MarketStatus,
+  MarketTimeSeries, PaymentQuote, QueryResult, SolanaNetwork, UploadResult,
 } from '../types'
 
 export const API_BASE: string =
@@ -64,10 +65,35 @@ export const api = {
 
   quote: () => request<PaymentQuote>('/payment/quote'),
 
+  /** Live cluster state and treasury balance. */
+  network: () => request<SolanaNetwork>('/payment/network'),
+
   /** Past reconciled analyses. Outlives the session TTL because it holds
    *  results, not documents. */
   history: (limit = 50) => request<HistoryResult>(`/history?limit=${limit}`),
 
   /** URL for a rendered source page. Only targeted pages are rasterised. */
   pageImage: (sid: string, page: number) => `${API_BASE}/page/${sid}/${page}`,
+
+  /* Market data. Proxied through the engine, never called from the browser —
+   * the Twelve Data key is billable, and a key the frontend can read is a key
+   * that has already leaked. */
+
+  marketStatus: () => request<MarketStatus>('/market/status'),
+
+  marketSearch: (query: string) =>
+    request<MarketSearchResult>(`/market/search?q=${encodeURIComponent(query)}`),
+
+  marketQuote: (symbol: string, exchange?: string) =>
+    request<MarketQuote>(
+      `/market/quote?symbol=${encodeURIComponent(symbol)}` +
+      (exchange ? `&exchange=${encodeURIComponent(exchange)}` : ''),
+    ),
+
+  marketSeries: (symbol: string, interval = '1day', outputsize = 260, exchange?: string) =>
+    request<MarketTimeSeries>(
+      `/market/timeseries?symbol=${encodeURIComponent(symbol)}` +
+      `&interval=${encodeURIComponent(interval)}&outputsize=${outputsize}` +
+      (exchange ? `&exchange=${encodeURIComponent(exchange)}` : ''),
+    ),
 }

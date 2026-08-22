@@ -92,6 +92,51 @@ def verify(signature: str) -> dict:
     }
 
 
+def network() -> dict:
+    """Live cluster state and treasury balance, read straight off the RPC.
+
+    Everything here is either a real on-chain reading or an explicit null with
+    the reason attached. There is deliberately no fallback figure: an invented
+    treasury balance on a page about settlement would be the one number on this
+    dashboard that nobody could trace.
+    """
+    result: dict = {
+        "cluster": CLUSTER,
+        "rpc_url": RPC_URL,
+        "treasury": TREASURY or None,
+        "reachable": False,
+        "version": None,
+        "slot": None,
+        "balance_sol": None,
+        "reason": None,
+    }
+
+    if not TREASURY:
+        result["reason"] = (
+            "SOLANA_TREASURY is not set, so there is no account to read a balance from."
+        )
+
+    try:
+        version = _rpc("getVersion", [])
+        result["version"] = (version.get("result") or {}).get("solana-core")
+
+        slot = _rpc("getSlot", [])
+        result["slot"] = slot.get("result")
+        result["reachable"] = result["slot"] is not None
+
+        if TREASURY:
+            balance = _rpc("getBalance", [TREASURY])
+            lamports = (balance.get("result") or {}).get("value")
+            if isinstance(lamports, int):
+                result["balance_sol"] = lamports / LAMPORTS_PER_SOL
+            elif balance.get("error"):
+                result["reason"] = str(balance["error"].get("message") or balance["error"])
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        result["reason"] = f"Could not reach the Solana RPC: {error}"
+
+    return result
+
+
 def gate(session: dict) -> dict | None:
     """Return an error payload when a session may not be read, else None."""
     if not PAYMENT_REQUIRED or session.get("paid"):

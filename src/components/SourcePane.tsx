@@ -66,7 +66,7 @@ export function SourcePane() {
 
   if (!focus || page == null) {
     return (
-      <div className="source-pane">
+      <div className="card p-lg">
         <Empty
           icon="ads_click"
           title="Nothing selected"
@@ -77,27 +77,36 @@ export function SourcePane() {
   }
 
   return (
-    <div className="source-pane">
-      <header className="source-head">
-        <div>
-          <span className="eyebrow">SOURCE DOCUMENT</span>
-          <b>Page {page}</b>
+    <div className="card flex flex-col overflow-hidden">
+      <header className="card-header">
+        <div className="min-w-0">
+          <span className="eyebrow">Source document</span>
+          <b className="block text-title-md text-primary">Page {page}</b>
         </div>
-        <div className="source-head-meta">
+        <div className="text-right min-w-0">
           {focus.value != null && (
-            <span className="mono">{exact(focus.value, analysis?.unit)}</span>
+            <span className="mono block text-body-md text-primary">
+              {exact(focus.value, analysis?.unit)}
+            </span>
           )}
-          <span className="source-label">{focus.label}</span>
+          <span className="block text-body-sm text-on-surface-variant truncate max-w-[16ch]">
+            {focus.label}
+          </span>
         </div>
       </header>
 
-      <div className="source-scroll">
+      <div className="p-md bg-surface-container-low max-h-[600px] overflow-auto">
         <div
-          className="source-canvas"
+          className="relative w-full mx-auto bg-surface-container-lowest rounded
+                     border border-hairline overflow-hidden shadow-panel"
           style={{ aspectRatio: `${dimensions.width} / ${dimensions.height}` }}
         >
           {status === 'ready' && src ? (
-            <img src={src} alt={`Page ${page} of the source document`} />
+            <img
+              src={src}
+              alt={`Page ${page} of the source document`}
+              className="absolute inset-0 h-full w-full object-contain"
+            />
           ) : (
             <Schematic loading={status === 'loading'} />
           )}
@@ -108,19 +117,23 @@ export function SourcePane() {
         </div>
       </div>
 
-      {status === 'missing' && (
-        <p className="source-note">
-          <Icon name="info" />
-          This session was loaded from a verified fixture, so the original PDF is
-          not on disk. The coordinates below are the real ones — upload the report
-          to see them over the page itself.
-        </p>
-      )}
-      {boxes.length > 1 && (
-        <p className="source-note">
-          <Icon name="account_tree" />
-          Boxed {boxes.length} cells: the figure and the inputs it was computed from.
-        </p>
+      {(status === 'missing' || boxes.length > 1) && (
+        <footer className="px-lg py-md border-t border-hairline space-y-xs">
+          {status === 'missing' && (
+            <p className="flex items-start gap-xs text-body-sm text-on-surface-variant">
+              <Icon name="info" className="text-[16px] shrink-0 mt-px" />
+              This session was loaded from a verified fixture, so the original PDF is not
+              on disk. The coordinates boxed here are the real ones — upload the report to
+              see them over the page itself.
+            </p>
+          )}
+          {boxes.length > 1 && (
+            <p className="flex items-start gap-xs text-body-sm text-on-surface-variant">
+              <Icon name="account_tree" className="text-[16px] shrink-0 mt-px" />
+              Boxed {boxes.length} cells: the figure and the inputs it was computed from.
+            </p>
+          )}
+        </footer>
       )}
     </div>
   )
@@ -138,8 +151,20 @@ function Highlight({
     height: `${((bottom - top) / dimensions.height) * 100}%`,
   }
   return (
-    <div className={`highlight ${box.primary ? 'primary' : 'secondary'}`} style={style}>
-      <span className="highlight-tag">{box.label}</span>
+    <div
+      style={style}
+      className={`absolute rounded-sm pointer-events-none animate-fade-up
+        ${box.primary
+          ? 'border-2 border-secondary bg-secondary/15 shadow-[0_0_0_3px_rgb(var(--c-secondary)/0.15)]'
+          : 'border border-dashed border-warning bg-warning/10'}`}
+    >
+      <span className={`absolute -top-5 left-0 whitespace-nowrap rounded-sm px-xs
+        text-label-sm uppercase
+        ${box.primary
+          ? 'bg-secondary text-on-secondary'
+          : 'bg-warning text-on-warning'}`}>
+        {box.label}
+      </span>
     </div>
   )
 }
@@ -148,16 +173,24 @@ function Highlight({
  *  mistaken for a rendering of the real document. */
 function Schematic({ loading }: { loading: boolean }) {
   return (
-    <div className="schematic">
-      {loading && <div className="schematic-loading"><div className="spinner" /></div>}
-      <div className="schematic-rule w-40" />
-      <div className="schematic-rule w-70" />
-      <div className="schematic-gap" />
+    <div className="absolute inset-0 p-[6%] flex flex-col gap-[1.5%]
+                    bg-surface-container-lowest">
+      {loading && (
+        <div className="absolute inset-0 grid place-items-center bg-surface-container-lowest/70">
+          <span className="spinner text-secondary" />
+        </div>
+      )}
+      <div className="h-[1.4%] w-[40%] rounded-full bg-surface-container-high" />
+      <div className="h-[1.4%] w-[70%] rounded-full bg-surface-container-high" />
+      <div className="h-[4%]" />
       {Array.from({ length: 16 }, (_, index) => (
-        <div key={index} className="schematic-row">
-          <i className="schematic-rule" style={{ width: `${38 + (index % 5) * 9}%` }} />
-          <i className="schematic-figure" />
-          <i className="schematic-figure" />
+        <div key={index} className="flex items-center gap-[3%]">
+          <i
+            className="h-[1.2%] min-h-[3px] rounded-full bg-surface-container-high"
+            style={{ width: `${38 + (index % 5) * 9}%` }}
+          />
+          <i className="h-[1.2%] min-h-[3px] w-[12%] rounded-full bg-surface-container-high ml-auto" />
+          <i className="h-[1.2%] min-h-[3px] w-[12%] rounded-full bg-surface-container-high" />
         </div>
       ))}
     </div>
