@@ -52,6 +52,42 @@ are accepted), or from the real environment, which always wins.
 | `PAYMENT_REQUIRED` | `false` | Enforces the Solana metering gate. Deliberately off. |
 | `SOLANA_TREASURY` | unset | Settlement address. |
 | `VITE_API_BASE` | `http://127.0.0.1:8000` | Where the frontend looks for the engine. |
+| `VITE_SUPABASE_URL` | unset | Switches sign-in to Supabase Auth. The project URL, not the `/rest/v1` endpoint. |
+| `VITE_SUPABASE_ANON_KEY` | unset | The anon JWT the browser uses for auth. Never the service key. |
+
+---
+
+## Accounts
+
+The app is behind a login. There are two backends and the frontend picks one at
+boot from what is configured:
+
+| | `VITE_SUPABASE_*` set | unset |
+|---|---|---|
+| Accounts | Supabase Auth, shared across devices | This browser only |
+| Password | Held by Supabase | PBKDF2-SHA256, random per-account salt, in `localStorage` |
+| Session | JWT, refreshed automatically | A user id in `localStorage` |
+
+The local mode exists for the same reason the demo document does: the whole
+system has to be runnable with no keys. The sign-up screen says which mode it
+is in rather than implying an account system that is not there.
+
+**The engine has no auth.** CORS is open and every endpoint is unauthenticated
+— this gate is the frontend's alone, and it is a prototype's gate. Anyone who
+can reach port 8000 can reach the engine directly.
+
+Signing out purges the tab: every in-memory document goes with it, and the
+engine sessions behind them expire on their own TTL. Signing in as someone else
+starts from an empty library rather than inheriting the last analyst's queue.
+
+Two Supabase details worth knowing:
+
+- If the project requires **email confirmation**, sign-up returns no session.
+  The screen says so and sends you to log in, rather than dropping you on a
+  dashboard that cannot load.
+- Auth is unrelated to the audit history. The browser still never talks to
+  Supabase for data — it reads `GET /history` from the engine, which holds the
+  server-side key.
 
 ---
 
@@ -144,6 +180,7 @@ nothing — a missing prior year is our gap, not evidence against the figure.
 
 | Screen | Purpose |
 |---|---|
+| **Log in / Sign up** | The way in. Both land on the Analysis dashboard. See [Accounts](#accounts). |
 | **Analysis** | The hub. Every document finance inserted, queued and reconciled, each with its own session and purge timer. Selecting one opens its figures, click-to-source provenance, and the query bar. |
 | **Overview** | One document's verdict: reconciliation results with expected vs actual, the ratio pack, and the balance sheet with every figure clickable. |
 | **Say–Do Gap** | Management's narrative claims tested against the reconciled figures. |

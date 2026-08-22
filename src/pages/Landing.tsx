@@ -1,5 +1,6 @@
-/** The entry point. Nothing else in the app renders until a document is loaded,
- *  because every other page is a view onto one analysis.
+/** The dashboard's first run. It renders inside the shell in place of the
+ *  Analysis hub while the library is empty, because a queue with nothing in it
+ *  says less than the three ways to put something in it.
  *
  *  Three ways in: upload a real report, load the hand-verified extraction, or
  *  load the doctored copy. The doctored path is not a toy — it is how you see
@@ -15,10 +16,13 @@ interface Props {
   onDemo: (variant: 'clean' | 'doctored') => void
   onFiles: (files: File[]) => void
   onDismissError: () => void
+  /** The signed-in analyst's name, so the empty dashboard is addressed to
+   *  someone rather than being a marketing page they already converted on. */
+  greeting?: string
 }
 
 export default function Landing({
-  busy, error, onDemo, onFiles, onDismissError,
+  busy, error, onDemo, onFiles, onDismissError, greeting,
 }: Props) {
   const input = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -32,12 +36,14 @@ export default function Landing({
     <div className="landing">
       <div className="landing-inner">
         <header className="landing-head">
-          <span className="eyebrow">SOLFV · FINANCIAL REPORT INTELLIGENCE</span>
-          <h1>The model extracts.<br />The arithmetic decides.</h1>
+          <span className="eyebrow">
+            {greeting ? `WELCOME, ${greeting.toUpperCase()}` : 'SOLFV · FINANCIAL REPORT INTELLIGENCE'}
+          </span>
+          <h1>Nothing in memory yet.</h1>
           <p>
-            Upload a Malaysian annual report and every figure is reconciled against
-            accounting identities before it reaches a dashboard. A number that fails
-            is quarantined, not displayed with a caveat.
+            Insert a Malaysian annual report and every figure is reconciled against
+            accounting identities before it reaches your dashboard. A number that
+            fails is quarantined, not displayed with a caveat.
           </p>
         </header>
 

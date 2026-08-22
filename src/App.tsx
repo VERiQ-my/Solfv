@@ -1,26 +1,33 @@
-/** App shell and routing.
+/** App shell, auth gate and routing.
  *
  *  Routing is a switch over a union rather than a router: a handful of views
  *  over an in-memory library, no deep links worth preserving, and a URL that
  *  outlived its session would only promise data the TTL already destroyed.
+ *  The auth screens follow the same rule — `authPage` is a two-value switch,
+ *  and a signed-in user never sees either one.
  *
- *  Analysis is the hub — the engine's queue over everything finance inserted.
- *  Every other view is a lens on whichever document is selected there.
+ *  Analysis is the hub — the engine's queue over everything finance inserted —
+ *  and it is where a login lands. Every other view is a lens on whichever
+ *  document is selected there.
  */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Analysis from './pages/Analysis'
 import Benchmark from './pages/Benchmark'
 import History from './pages/History'
 import Landing from './pages/Landing'
+import Login from './pages/Login'
 import Metering from './pages/Metering'
 import Overview from './pages/Overview'
 import Privacy from './pages/Privacy'
 import Risk from './pages/Risk'
 import SayDo from './pages/SayDo'
+import SignUp from './pages/SignUp'
 import { Logo } from './components/Logo'
 import { Icon } from './components/ui'
 import { countdown } from './lib/format'
+import { AuthProvider, useAuth } from './lib/auth'
+import type { AuthUser } from './lib/auth'
 import { SessionProvider, useSession } from './state'
 import type { Page } from './types'
 
@@ -41,20 +48,17 @@ const STANDALONE = new Set<Page>(['analysis', 'history'])
 
 export default function App() {
   return (
-    <SessionProvider>
-      <Shell />
-    </SessionProvider>
+    <AuthProvider>
+      <Root />
+    </AuthProvider>
   )
 }
 
-function Shell() {
-  const {
-    documents, analysis, active, busy, error, expiresIn,
-    purgeAll, addFiles, loadDemo, dismissError,
-  } = useSession()
-  const [page, setPage] = useState<Page>('analysis')
-  const [drawer, setDrawer] = useState(false)
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+type Theme = 'light' | 'dark'
+
+/** Owned above the auth gate so the choice survives logging in and out. */
+function useTheme(): [Theme, () => void] {
+  const [theme, setTheme] = useState<Theme>(() => {
     try {
       const stored = localStorage.getItem('solfv-theme')
       if (stored === 'light' || stored === 'dark') return stored
@@ -67,6 +71,61 @@ function Shell() {
     try { localStorage.setItem('solfv-theme', theme) } catch { /* non-fatal */ }
   }, [theme])
 
+  const toggle = useCallback(
+    () => setTheme(current => (current === 'light' ? 'dark' : 'light')),
+    [],
+  )
+  return [theme, toggle]
+}
+
+function Root() {
+  const { user, ready, clearFeedback } = useAuth()
+  const [theme, toggleTheme] = useTheme()
+  const [authPage, setAuthPage] = useState<'login' | 'signup'>('login')
+
+  // Feedback belongs to the screen that produced it. A failed log-in must not
+  // greet the user on the sign-up form as if it were about that form.
+  const switchTo = useCallback((next: 'login' | 'signup') => {
+    clearFeedback()
+    setAuthPage(next)
+  }, [clearFeedback])
+
+  // Restoring a session is a network round-trip under Supabase. Showing the
+  // login form during it would flash a screen the user has already passed.
+  if (!ready) {
+    return (
+      <div className="boot">
+        <div className="spinner large" />
+        <span>Restoring your session…</span>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return authPage === 'signup'
+      ? <SignUp onLogIn={() => switchTo('login')} theme={theme} onTheme={toggleTheme} />
+      : <Login onSignUp={() => switchTo('signup')} theme={theme} onTheme={toggleTheme} />
+  }
+
+  // Keyed by account: signing out and back in as someone else must not leave
+  // the previous analyst's queue on screen.
+  return (
+    <SessionProvider key={user.id}>
+      <Shell theme={theme} onTheme={toggleTheme} user={user} />
+    </SessionProvider>
+  )
+}
+
+function Shell({
+  theme, onTheme, user,
+}: { theme: Theme; onTheme: () => void; user: AuthUser }) {
+  const {
+    documents, analysis, active, busy, error, expiresIn,
+    purgeAll, addFiles, loadDemo, dismissError,
+  } = useSession()
+  const [page, setPage] = useState<Page>('analysis')
+  const [drawer, setDrawer] = useState(false)
+
   // A page that needs a selected document should not strand the user on an
   // empty view when the library empties or the selection is purged.
   useEffect(() => {
@@ -75,23 +134,11 @@ function Shell() {
 
   const go = (next: Page) => { setPage(next); setDrawer(false) }
 
-  if (documents.length === 0) {
-    return (
-      <div className="app-shell landing-shell">
-        <TopBar
-          theme={theme} onTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-          onMenu={() => setDrawer(true)} bare
-        />
-        <Landing
-          busy={busy} error={error} onDemo={loadDemo}
-          onFiles={addFiles} onDismissError={dismissError}
-        />
-      </div>
-    )
-  }
-
   const expiring = expiresIn > 0 && expiresIn < 300
   const needsDocument = !STANDALONE.has(page)
+  /** First run: the dashboard is still the dashboard, but the hub it frames is
+   *  the way in rather than a queue with nothing in it. */
+  const firstRun = documents.length === 0
 
   return (
     <div className="app-shell">
@@ -142,7 +189,8 @@ function Shell() {
         )}
 
         <div className="sidebar-bottom">
-          <button className="btn ghost full" onClick={purgeAll}>
+          <AccountChip user={user} />
+          <button className="btn ghost full" onClick={purgeAll} disabled={firstRun}>
             <Icon name="delete_forever" />Purge all ({documents.length})
           </button>
           <span><Icon name="database_off" />Documents in memory only · never stored</span>
@@ -153,14 +201,24 @@ function Shell() {
       <main className="main">
         <TopBar
           theme={theme}
-          onTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+          onTheme={onTheme}
           onMenu={() => setDrawer(true)}
           expiresIn={analysis ? expiresIn : undefined}
         />
 
-        <StatusStrip />
+        <StatusStrip user={user} />
 
-        {page === 'analysis' && <Analysis />}
+        {page === 'analysis' && (
+          firstRun
+            ? (
+              <Landing
+                busy={busy} error={error} onDemo={loadDemo}
+                onFiles={addFiles} onDismissError={dismissError}
+                greeting={user.name}
+              />
+            )
+            : <Analysis />
+        )}
         {page === 'history' && <History />}
         {needsDocument && analysis && (
           <>
@@ -197,9 +255,12 @@ function Shell() {
               )
             })}
           </nav>
-          <button className="btn ghost full" onClick={() => { purgeAll(); setDrawer(false) }}>
-            <Icon name="delete_forever" />Purge all
-          </button>
+          <div className="drawer-foot">
+            <AccountChip user={user} />
+            <button className="btn ghost full" onClick={() => { purgeAll(); setDrawer(false) }}>
+              <Icon name="delete_forever" />Purge all
+            </button>
+          </div>
         </div>
         <button className="drawer-scrim" aria-label="Close menu" onClick={() => setDrawer(false)} />
       </div>
@@ -223,22 +284,53 @@ function Shell() {
   )
 }
 
+/** Who is signed in, and the way out. Purging first is deliberate: sessions
+ *  live in this tab, so leaving them behind on sign-out would keep documents
+ *  in memory that their owner believes they have closed. */
+function AccountChip({ user }: { user: AuthUser }) {
+  const { logOut, busy } = useAuth()
+  const { purgeAll } = useSession()
+
+  const initials = user.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase() ?? '')
+    .join('') || user.email[0]?.toUpperCase() || '?'
+
+  return (
+    <div className="account">
+      <span className="account-avatar" aria-hidden="true">{initials}</span>
+      <span className="account-copy">
+        <b title={user.name}>{user.name}</b>
+        <small title={user.email}>{user.email}</small>
+      </span>
+      <button
+        className="icon-btn"
+        title="Sign out and purge this tab"
+        aria-label="Sign out"
+        disabled={busy}
+        onClick={() => { purgeAll(); void logOut() }}
+      >
+        <Icon name="logout" />
+      </button>
+    </div>
+  )
+}
+
 function TopBar({
-  theme, onTheme, onMenu, expiresIn, bare,
+  theme, onTheme, onMenu, expiresIn,
 }: {
-  theme: 'light' | 'dark'
+  theme: Theme
   onTheme: () => void
   onMenu: () => void
   expiresIn?: number
-  bare?: boolean
 }) {
   return (
     <header className="topbar">
-      {!bare && (
-        <button className="mobile-menu" onClick={onMenu} aria-label="Open menu">
-          <Icon name="menu" />
-        </button>
-      )}
+      <button className="mobile-menu" onClick={onMenu} aria-label="Open menu">
+        <Icon name="menu" />
+      </button>
       <div className="topbar-brand"><Logo /></div>
       <div className="topbar-spacer" />
       {expiresIn != null && (
@@ -254,10 +346,22 @@ function TopBar({
 }
 
 /** The honest one-line state of the batch, always visible. */
-function StatusStrip() {
+function StatusStrip({ user }: { user: AuthUser }) {
   const { documents, analysis, busy } = useSession()
   const ready = documents.filter(doc => doc.status === 'ready')
   const failed = ready.filter(doc => (doc.analysis?.summary.checks_failed ?? 0) > 0).length
+
+  if (documents.length === 0) {
+    return (
+      <div className="status-strip good">
+        <span className="status-dot" />
+        <span>
+          <b>Signed in as {user.name}</b>
+          {' · nothing in memory · insert a document to start the engine'}
+        </span>
+      </div>
+    )
+  }
 
   return (
     <div className={`status-strip ${failed ? 'bad' : 'good'}`}>
