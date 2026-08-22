@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
-from app.verify_hash import (  # noqa: E402
+from app.verify_hash import (
     CANONICALIZATION_VERSION,
     canonicalize_verify_result,
     payment_memo_for_verify_result,

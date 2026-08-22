@@ -29,7 +29,7 @@ export interface AuthUser {
   name: string
 }
 
-export type AuthMode = 'supabase' | 'local'
+export type AuthMode = 'guest' | 'supabase' | 'local'
 
 export interface Credentials {
   email: string
@@ -58,12 +58,15 @@ interface AuthState {
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim()
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim()
 const LOCAL_REQUESTED = import.meta.env.VITE_AUTH_MODE === 'local'
+const GUEST_REQUESTED = import.meta.env.VITE_AUTH_MODE === 'guest'
 
 export const AUTH_MODE: AuthMode =
-  SUPABASE_URL && SUPABASE_KEY ? 'supabase' : 'local'
+  GUEST_REQUESTED ? 'guest' : SUPABASE_URL && SUPABASE_KEY ? 'supabase' : 'local'
 
 export const AUTH_CONFIGURATION_ERROR =
-  Boolean(SUPABASE_URL) !== Boolean(SUPABASE_KEY)
+  GUEST_REQUESTED
+    ? null
+    : Boolean(SUPABASE_URL) !== Boolean(SUPABASE_KEY)
     ? 'Set both VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, or remove both.'
     : !SUPABASE_URL && !LOCAL_REQUESTED
       ? 'Authentication is not configured. Set Supabase credentials, or VITE_AUTH_MODE=local for development.'
@@ -71,10 +74,12 @@ export const AUTH_CONFIGURATION_ERROR =
 
 let apiToken: string | null = null
 let localUserId: string | null = null
+let guestUserId: string | null = null
 
 export function apiAuthHeaders(): Record<string, string> {
   if (AUTH_MODE === 'supabase' && apiToken) return { Authorization: `Bearer ${apiToken}` }
   if (AUTH_MODE === 'local' && localUserId) return { 'X-Solfv-Dev-User': localUserId }
+  if (AUTH_MODE === 'guest' && guestUserId) return { 'X-Solfv-Guest-User': guestUserId }
   return {}
 }
 
@@ -124,6 +129,17 @@ function assertCredentials({ email, password }: Credentials) {
 
 const USERS_KEY = 'solfv-users'
 const SESSION_KEY = 'solfv-session'
+const GUEST_SESSION_KEY = 'solfv-guest-session'
+
+function guestBackend(): AuthUser {
+  let id = ''
+  try { id = localStorage.getItem(GUEST_SESSION_KEY) ?? '' } catch { /* generate below */ }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    id = crypto.randomUUID()
+    try { localStorage.setItem(GUEST_SESSION_KEY, id) } catch { /* this session still works */ }
+  }
+  return { id, email: '', name: 'Guest' }
+}
 
 interface LocalAccount {
   id: string
@@ -260,9 +276,13 @@ interface SupabaseAuth {
   signUp(input: {
     email: string
     password: string
-    options?: { data?: Record<string, unknown> }
+    options?: { data?: Record<string, unknown>; emailRedirectTo?: string }
   }): Promise<{ data: { session: SupabaseSession | null; user: SupabaseAuthUser | null }; error: { message: string } | null }>
   signInWithPassword(input: Credentials): Promise<{
+    data: { session: SupabaseSession | null; user: SupabaseAuthUser | null }
+    error: { message: string } | null
+  }>
+  signInAnonymously(): Promise<{
     data: { session: SupabaseSession | null; user: SupabaseAuthUser | null }
     error: { message: string } | null
   }>
@@ -300,6 +320,10 @@ function toUser(user: SupabaseAuthUser | null | undefined): AuthUser | null {
   }
 }
 
+function emailConfirmationRedirect(): string | undefined {
+  return typeof window === 'undefined' ? undefined : window.location.origin
+}
+
 /* --------------------------------------------------------------------------
    Provider
    -------------------------------------------------------------------------- */
@@ -320,6 +344,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let unsubscribe: (() => void) | undefined
 
     void (async () => {
+      if (AUTH_MODE === 'guest') {
+        const current = guestBackend()
+        guestUserId = current.id
+        if (active) { setUser(current); setReady(true) }
+        return
+      }
       if (AUTH_MODE === 'local') {
         const current = localBackend.current()
         localUserId = current?.id ?? null
@@ -329,9 +359,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const auth = await supabaseAuth()
         const { data } = await auth.getSession()
+        let session = data.session
+        if (!session) {
+          const { data: anonymous, error: failure } = await auth.signInAnonymously()
+          if (failure || !anonymous.session) {
+            throw new AuthError(
+              'Could not start a private session. In Supabase Dashboard, open Authentication → General Configuration and enable “Allow anonymous sign-ins”, then reload this page.',
+            )
+          }
+          session = anonymous.session
+        }
         if (!active) return
-        apiToken = data.session?.access_token ?? null
-        setUser(toUser(data.session?.user))
+        apiToken = session.access_token
+        setUser(toUser(session.user))
         // Supabase refreshes tokens on its own clock; follow it rather than
         // holding a copy that can go stale.
         const listener = auth.onAuthStateChange((_event, session) => {
@@ -390,7 +430,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error: failure } = await auth.signUp({
         email: normaliseEmail(input.email),
         password: input.password,
-        options: { data: { full_name: input.name.trim() } },
+        options: {
+          data: { full_name: input.name.trim() },
+          emailRedirectTo: emailConfirmationRedirect(),
+        },
       })
       if (failure) throw new AuthError(failure.message)
 

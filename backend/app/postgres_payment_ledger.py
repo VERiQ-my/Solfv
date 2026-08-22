@@ -10,8 +10,8 @@ class PostgresPaymentLedger:
         if not database_url:
             raise ValueError("DATABASE_URL is required for the payment ledger")
 
-        from psycopg_pool import ConnectionPool
         from psycopg.rows import dict_row
+        from psycopg_pool import ConnectionPool
 
         self.pool = ConnectionPool(
             conninfo=database_url,
@@ -37,10 +37,9 @@ class PostgresPaymentLedger:
             return self._row_to_dict(connection, row)
 
     def record_verified(self, payment: VerifiedPayment) -> dict[str, Any]:
-        with self.pool.connection() as connection:
-            with connection.transaction():
-                row = connection.execute(
-                    """
+        with self.pool.connection() as connection, connection.transaction():
+            row = connection.execute(
+                """
                     insert into public.payments (
                         resource_key, caller_id, verify_hash, expected_memo,
                         expected_amount_base_units, expected_mint, expected_recipient,
@@ -52,48 +51,48 @@ class PostgresPaymentLedger:
                     on conflict do nothing
                     returning *
                     """,
-                    (
-                        payment.resource_key,
-                        payment.caller_id,
-                        payment.verify_hash,
-                        payment.expected_memo,
-                        payment.expected_amount_base_units,
-                        payment.expected_mint,
-                        payment.expected_recipient,
-                        payment.network,
-                        payment.transaction_signature,
-                        payment.payer_wallet,
-                        payment.commitment,
-                        payment.slot,
-                        payment.block_time,
-                    ),
-                ).fetchone()
-                if row is not None:
-                    return self._row_to_dict(connection, row)
+                (
+                    payment.resource_key,
+                    payment.caller_id,
+                    payment.verify_hash,
+                    payment.expected_memo,
+                    payment.expected_amount_base_units,
+                    payment.expected_mint,
+                    payment.expected_recipient,
+                    payment.network,
+                    payment.transaction_signature,
+                    payment.payer_wallet,
+                    payment.commitment,
+                    payment.slot,
+                    payment.block_time,
+                ),
+            ).fetchone()
+            if row is not None:
+                return self._row_to_dict(connection, row)
 
-                existing = connection.execute(
-                    """
+            existing = connection.execute(
+                """
                     select * from public.payments
                     where transaction_signature = %s
                        or (resource_key = %s and verify_hash = %s)
                     for update
                     """,
-                    (payment.transaction_signature, payment.resource_key, payment.verify_hash),
-                ).fetchone()
-                if existing is None:
-                    raise RuntimeError("payment insert conflict could not be resolved")
+                (payment.transaction_signature, payment.resource_key, payment.verify_hash),
+            ).fetchone()
+            if existing is None:
+                raise RuntimeError("payment insert conflict could not be resolved")
 
-                existing_dict = self._row_to_dict(connection, existing)
-                same_payment = (
-                    existing_dict["resource_key"] == payment.resource_key
-                    and existing_dict["verify_hash"] == payment.verify_hash
-                    and existing_dict["transaction_signature"] == payment.transaction_signature
+            existing_dict = self._row_to_dict(connection, existing)
+            same_payment = (
+                existing_dict["resource_key"] == payment.resource_key
+                and existing_dict["verify_hash"] == payment.verify_hash
+                and existing_dict["transaction_signature"] == payment.transaction_signature
+            )
+            if not same_payment:
+                raise PaymentConflictError(
+                    "transaction signature or resource is already bound to another payment"
                 )
-                if not same_payment:
-                    raise PaymentConflictError(
-                        "transaction signature or resource is already bound to another payment"
-                    )
-                return existing_dict
+            return existing_dict
 
     @staticmethod
     def _row_to_dict(connection: Any, row: Any) -> dict[str, Any]:

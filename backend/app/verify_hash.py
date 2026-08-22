@@ -2,7 +2,6 @@ import hashlib
 import json
 from typing import Any
 
-
 CANONICALIZATION_VERSION = "json-sorted-compact-utf8-v1"
 MEMO_PREFIX = "solfv:v1:"
 

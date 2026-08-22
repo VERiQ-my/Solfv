@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 from .market_api import _get_json
 from .payment_api import _payment_required, _requirements, get_payment_ledger
 from .verify_hash import payment_memo_for_verify_result, verify_result_sha256
-
 
 router = APIRouter(prefix="/v1", tags=["paper-orders"])
 
@@ -45,6 +44,6 @@ def create_paper_order(resource_key: str, payload: PaperOrderRequest) -> dict:
         "reference_price_usd": price,
         "simulated_quantity": payload.notional_usd / price,
         "payment_transaction_signature": payment["transaction_signature"],
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "disclaimer": "No cryptocurrency was purchased or transferred.",
     }

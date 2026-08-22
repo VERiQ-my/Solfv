@@ -11,7 +11,6 @@ from .postgres_payment_ledger import PostgresPaymentLedger
 from .solana_verifier import PaymentVerificationError, SolanaPaymentVerifier, SolanaRpcClient
 from .verify_hash import payment_memo_for_verify_result, verify_result_sha256
 
-
 router = APIRouter(prefix="/v1", tags=["payments"])
 settings = get_settings()
 active_ledger: PaymentLedger | PostgresPaymentLedger | None = None

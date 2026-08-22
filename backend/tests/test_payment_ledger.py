@@ -5,7 +5,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
-from app.payment_ledger import (  # noqa: E402
+from app.payment_ledger import (
     PaymentConflictError,
     PaymentLedger,
     VerifiedPayment,

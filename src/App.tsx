@@ -18,19 +18,13 @@
  *  payment surface.
  */
 
-import { useCallback, useEffect, useState } from 'react'
-import Analysis from './pages/Analysis'
-import Dashboard from './pages/Dashboard'
-import Expenses from './pages/Expenses'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import Login from './pages/Login'
-import Market from './pages/Market'
-import Privacy from './pages/Privacy'
 import SignUp from './pages/SignUp'
-import Solana from './pages/Solana'
 import { Logo } from './components/Logo'
 import { Icon } from './components/ui'
 import { countdown } from './lib/format'
-import { AUTH_CONFIGURATION_ERROR, useAuth } from './lib/auth'
+import { AUTH_CONFIGURATION_ERROR, AuthProvider, useAuth } from './lib/auth'
 import type { AuthUser } from './lib/auth'
 import { NavProvider, SECTIONS, useNav } from './nav'
 import { SessionProvider, useSession } from './state'
@@ -47,8 +41,18 @@ const HEADINGS: Record<Section, string> = {
   privacy: 'Privacy & Security',
 }
 
+// The analysis pages are independent destinations. Loading them on demand
+// keeps the initial shell responsive and defers the Solana SDK until a user
+// actually opens the payment surface.
+const Analysis = lazy(() => import('./pages/Analysis'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Expenses = lazy(() => import('./pages/Expenses'))
+const Market = lazy(() => import('./pages/Market'))
+const Privacy = lazy(() => import('./pages/Privacy'))
+const Solana = lazy(() => import('./pages/Solana'))
+
 export default function App() {
-  return <DemoRoot />
+  return <AuthProvider><Root /></AuthProvider>
 }
 
 type Theme = 'light' | 'dark'
@@ -75,32 +79,11 @@ function useTheme(): [Theme, () => void] {
   return [theme, toggle]
 }
 
-const DEMO_USER: AuthUser = {
-  id: 'demo-user',
-  email: 'demo@solfv.local',
-  name: 'Demo workspace',
-}
-
-/** The judging path starts at the dashboard; production can still use Root. */
-function DemoRoot() {
-  const [theme, toggleTheme] = useTheme()
-  const [drawer, setDrawer] = useState(false)
-
-  return (
-    <SessionProvider key={DEMO_USER.id}>
-      <NavProvider initialSection="dashboard" onNavigate={() => setDrawer(false)}>
-        <Shell drawer={drawer} setDrawer={setDrawer} theme={theme}
-               onTheme={toggleTheme} user={DEMO_USER} />
-      </NavProvider>
-    </SessionProvider>
-  )
-}
-
 function Root() {
-  const { user, ready, clearFeedback } = useAuth()
+  const { user, ready, error, clearFeedback } = useAuth()
   const [theme, toggleTheme] = useTheme()
-  const [authPage, setAuthPage] = useState<'login' | 'signup'>('login')
   const [drawer, setDrawer] = useState(false)
+  const [authPage, setAuthPage] = useState<'login' | 'signup'>('login')
 
   if (AUTH_CONFIGURATION_ERROR) {
     return (
@@ -114,15 +97,7 @@ function Root() {
     )
   }
 
-  // Feedback belongs to the screen that produced it. A failed log-in must not
-  // greet the user on the sign-up form as if it were about that form.
-  const switchTo = useCallback((next: 'login' | 'signup') => {
-    clearFeedback()
-    setAuthPage(next)
-  }, [clearFeedback])
-
-  // Restoring a session is a network round-trip under Supabase. Showing the
-  // login form during it would flash a screen the user has already passed.
+  // Restoring or creating a private anonymous session is a network round-trip.
   if (!ready) {
     return (
       <div className="min-h-screen grid place-content-center justify-items-center gap-sm
@@ -134,6 +109,27 @@ function Root() {
   }
 
   if (!user) {
+    // Guest mode creates a user during restoration. A missing user there is a
+    // configuration/runtime failure; local and Supabase modes still expose
+    // their sign-in screens.
+    if (error && import.meta.env.VITE_AUTH_MODE === 'guest') {
+      return (
+        <div className="min-h-screen grid place-content-center p-lg bg-background">
+          <div className="max-w-xl card p-xl space-y-md">
+            <Icon name="error" className="text-danger text-[28px]" />
+            <h1 className="text-headline-md text-primary">Private session unavailable</h1>
+            <p className="text-body-md text-on-surface-variant">{error}</p>
+            <button className="btn-primary" onClick={() => window.location.reload()}>
+              Reload
+            </button>
+          </div>
+        </div>
+      )
+    }
+    const switchTo = (next: 'login' | 'signup') => {
+      clearFeedback()
+      setAuthPage(next)
+    }
     return authPage === 'signup'
       ? <SignUp onLogIn={() => switchTo('login')} theme={theme} onTheme={toggleTheme} />
       : <Login onSignUp={() => switchTo('signup')} theme={theme} onTheme={toggleTheme} />
@@ -183,18 +179,29 @@ function Shell({
 
         <div className="flex-1 overflow-y-auto p-margin-mobile md:p-xl pb-24 md:pb-xl">
           <div className="max-w-container-max mx-auto w-full space-y-xl">
-            {section === 'dashboard' && <Dashboard />}
-            {section === 'analysis' && <Analysis />}
-            {section === 'market' && <Market />}
-            {section === 'expenses' && <Expenses />}
-            {section === 'solana' && <Solana />}
-            {section === 'privacy' && <Privacy />}
+            <Suspense fallback={<PageLoading />}>
+              {section === 'dashboard' && <Dashboard />}
+              {section === 'analysis' && <Analysis />}
+              {section === 'market' && <Market />}
+              {section === 'expenses' && <Expenses />}
+              {section === 'solana' && <Solana />}
+              {section === 'privacy' && <Privacy />}
+            </Suspense>
           </div>
         </div>
       </main>
 
       <MobileDrawer open={drawer} onClose={() => setDrawer(false)} user={user} />
       <BottomNav />
+    </div>
+  )
+}
+
+function PageLoading() {
+  return (
+    <div className="min-h-48 grid place-content-center justify-items-center gap-sm text-on-surface-variant">
+      <span className="spinner h-7 w-7 border-4 text-secondary" />
+      <span className="text-body-md">Loading workspace…</span>
     </div>
   )
 }
@@ -301,19 +308,14 @@ function NavList() {
   )
 }
 
-/** Who is signed in, and the way out. Purging first is deliberate: sessions
- *  live in this tab, so leaving them behind on sign-out would keep documents in
- *  memory that their owner believes they have closed. */
+/** The anonymous identity attached to this browser's private session. */
 function AccountChip({ user }: { user: AuthUser }) {
-  const { logOut, busy } = useAuth()
-  const { purgeAll } = useSession()
-
   const initials = user.name
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map(part => part[0]?.toUpperCase() ?? '')
-    .join('') || user.email[0]?.toUpperCase() || '?'
+    .join('') || user.email[0]?.toUpperCase() || 'G'
 
   return (
     <div className="flex items-center gap-sm p-sm rounded-md border border-hairline
@@ -323,23 +325,14 @@ function AccountChip({ user }: { user: AuthUser }) {
         {initials}
       </span>
       <span className="min-w-0 flex-1">
-        <b className="block text-body-sm text-primary truncate" title={user.name}>
-          {user.name}
+        <b className="block text-body-sm text-primary truncate" title="Private guest session">
+          Private guest session
         </b>
         <small className="block text-body-sm text-on-surface-variant truncate"
-               title={user.email}>
-          {user.email}
+               title="Stored only in this browser">
+          No email or password
         </small>
       </span>
-      <button
-        className="icon-btn h-8 w-8 shrink-0"
-        title="Sign out and purge this tab"
-        aria-label="Sign out"
-        disabled={busy}
-        onClick={() => { purgeAll(); void logOut() }}
-      >
-        <Icon name="logout" className="text-[18px]" />
-      </button>
     </div>
   )
 }

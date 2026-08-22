@@ -3,12 +3,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import get_settings
 from . import payment_api
-from .payment_api import router as payment_router
+from .config import get_settings
 from .market_api import router as market_router
 from .paper_order_api import router as paper_order_router
-
+from .payment_api import router as payment_router
 
 settings = get_settings()
 

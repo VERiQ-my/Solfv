@@ -6,8 +6,8 @@ figure. Every judgement about trust was already made deterministically in
 `analysis/`, and re-deriving any of it at the transport layer would put an
 unchecked number back on the dashboard.
 
-CORS is wide open and there is no auth. This is a hackathon prototype and says
-so out loud.
+CORS is restricted to the deployed frontend. Every user-facing request carries
+the browser's private guest-session identifier.
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins, allow_credentials=False,
     allow_methods=["GET", "POST", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "X-Solfv-Dev-User"],
+    allow_headers=["Authorization", "Content-Type", "X-Solfv-Dev-User", "X-Solfv-Guest-User"],
 )
 
 
@@ -68,7 +68,9 @@ async def authenticated_api(request: Request, call_next):
         return await call_next(request)
     try:
         request.state.user = auth.require_user(
-            request.headers.get("authorization"), request.headers.get("x-solfv-dev-user"),
+            request.headers.get("authorization"),
+            request.headers.get("x-solfv-dev-user"),
+            request.headers.get("x-solfv-guest-user"),
         )
     except HTTPException as error:
         return JSONResponse({"detail": error.detail}, status_code=error.status_code)

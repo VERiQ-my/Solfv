@@ -1,8 +1,6 @@
-import base64
 import json
 import urllib.request
 from typing import Any
-
 
 TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 MEMO_PROGRAM_IDS = {
@@ -116,7 +114,7 @@ class SolanaPaymentVerifier:
                 if memo:
                     try:
                         memos.append(_base58_decode(str(memo)).decode("utf-8"))
-                    except Exception:
+                    except (PaymentVerificationError, UnicodeDecodeError):
                         memos.append(str(memo))
 
         matches = [

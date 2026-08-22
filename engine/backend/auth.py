@@ -7,6 +7,7 @@ import os
 import re
 import urllib.error
 import urllib.request
+import uuid
 from dataclasses import dataclass
 
 from fastapi import Header, HTTPException
@@ -33,7 +34,7 @@ class Principal:
 def status() -> dict:
     return {
         'mode': MODE,
-        'configured': MODE in {'anonymous', 'local'} or bool(SUPABASE_URL and SUPABASE_KEY),
+        'configured': MODE in {'anonymous', 'guest', 'local'} or bool(SUPABASE_URL and SUPABASE_KEY),
     }
 
 
@@ -67,6 +68,7 @@ def _supabase_user(token: str) -> Principal:
 def require_user(
     authorization: str | None = Header(default=None),
     x_solfv_dev_user: str | None = Header(default=None),
+    x_solfv_guest_user: str | None = Header(default=None),
 ) -> Principal:
     '''FastAPI dependency used by every user-facing engine endpoint.'''
     if MODE in {'anonymous', 'none', 'disabled'}:
@@ -76,6 +78,12 @@ def require_user(
             id=os.getenv('SOLFV_ANONYMOUS_USER_ID', 'demo-user'),
             mode='anonymous',
         )
+    if MODE == 'guest':
+        try:
+            guest_id = str(uuid.UUID(x_solfv_guest_user or ''))
+        except ValueError:
+            raise _denied('A private browser session is required.')
+        return Principal(id=guest_id, mode='guest')
     if MODE == 'local':
         if ENVIRONMENT == 'production':
             raise _denied('Local authentication is disabled in production.', 503)
@@ -83,7 +91,7 @@ def require_user(
             raise _denied('A local development account is required.')
         return Principal(id=x_solfv_dev_user, mode='local')
     if MODE != 'supabase':
-        raise _denied('SOLFV_AUTH_MODE must be supabase or development-only local.', 503)
+        raise _denied('SOLFV_AUTH_MODE must be guest, supabase, anonymous, or development-only local.', 503)
     scheme, _, token = (authorization or '').partition(' ')
     if scheme.lower() != 'bearer' or not token:
         raise _denied('Log in to use the SOLFV engine.')

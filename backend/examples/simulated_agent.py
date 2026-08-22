@@ -6,7 +6,6 @@ import urllib.error
 import urllib.request
 import uuid
 
-
 API_URL = "http://127.0.0.1:8000/v1/reports/demo-report/analysis"
 PAYER_WALLET = "ACVHZEXtMH1L3YT8RWymgyheKMshbn7AtcE2RT4Qe4W1"
 

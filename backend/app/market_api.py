@@ -1,11 +1,10 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.request import Request, urlopen
 
 from fastapi import APIRouter, HTTPException
 
 from .config import get_settings
-
 
 router = APIRouter(prefix="/v1/market", tags=["market"])
 
@@ -55,7 +54,7 @@ def solana_market() -> dict:
             "CoinGecko public market API",
             "GeckoTerminal public Solana pools API",
         ],
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "disclaimer": "Market intelligence only; not investment advice or trade execution.",
     }
 
@@ -86,6 +85,6 @@ def crypto_market() -> dict:
         ],
         "universe": "Top 50 crypto assets by market capitalization",
         "source": "CoinGecko market API",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "disclaimer": "Market intelligence only; not investment advice or trade execution.",
     }

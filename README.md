@@ -67,19 +67,21 @@ are accepted), or from the real environment, which always wins.
 | `VITE_API_BASE` | `http://127.0.0.1:8000` | Where the frontend looks for the engine. |
 | `VITE_SUPABASE_URL` | unset | Switches sign-in to Supabase Auth. The project URL, not the `/rest/v1` endpoint. |
 | `VITE_SUPABASE_ANON_KEY` | unset | The anon JWT the browser uses for auth. Never the service key. |
-| `VITE_AUTH_MODE` | unset | Set to `local` only for development browser-local accounts. |
-| `SOLFV_AUTH_MODE` | `supabase` | Engine auth mode; set to `local` only for development. |
+| `VITE_AUTH_MODE` | `guest` in `.env.production` | Uses a UUID private browser session. Set to `local` only for development browser-local accounts. |
+| `SOLFV_AUTH_MODE` | `guest` (set on the engine host) | Must match the production frontend guest mode. Set to `local` only for development. |
 | `SOLFV_ENVIRONMENT` | `development` | Must not be `production` when local auth is enabled. |
 | `SOLFV_CORS_ORIGINS` | localhost dev URLs | Comma-separated allowed frontend origins for the engine. |
 
 ---
 
-## Accounts
+## Sessions
 
-The app is behind a login. There are two backends and the frontend picks one at
-boot from what is configured:
+Production uses a private browser session: no email or password is collected.
+The browser creates a UUID and passes it to the engine solely to isolate each
+visitor's documents and audit history. Local development and an explicitly
+configured Supabase project continue to offer account sign-in:
 
-| | `VITE_SUPABASE_*` set | unset |
+| | Supabase configured | `VITE_AUTH_MODE=local` |
 |---|---|---|
 | Accounts | Supabase Auth, shared across devices | This browser only |
 | Password | Held by Supabase | PBKDF2-SHA256, random per-account salt, in `localStorage` |
@@ -89,9 +91,10 @@ The local mode exists for the same reason the demo document does: the whole
 system has to be runnable with no keys. The sign-up screen says which mode it
 is in rather than implying an account system that is not there.
 
-The engine verifies the Supabase access token on every application endpoint.
-Only `/health` is public. In production it rejects local browser accounts, and
-audit records are scoped to the authenticated user's id.
+The engine verifies the Supabase access token when Supabase mode is selected.
+In guest mode it validates the browser UUID format; in production it rejects
+anonymous and local browser accounts. Audit records are scoped to that session
+identity.
 
 Both screens land on the **Command Center**, which aggregates the persisted
 audit history and therefore has something to say before a single document is
@@ -198,6 +201,22 @@ curl https://solfv.veriq.my/api/health
 The tunnel credentials are kept outside the repository in the user
 `.cloudflared` directory. Treat them as secrets and revoke the tunnel from the
 Cloudflare dashboard if this computer is no longer trusted.
+
+### Automatic deployments
+
+Pushing to `main` can update both parts of the system:
+
+1. GitHub Actions runs [`.github/workflows/deploy-worker.yml`](.github/workflows/deploy-worker.yml)
+   to build and deploy the Cloudflare Worker. Add these GitHub repository
+   secrets before the first push: `CLOUDFLARE_ACCOUNT_ID`,
+   `CLOUDFLARE_API_TOKEN`, `VITE_SUPABASE_URL`, and
+   `VITE_SUPABASE_ANON_KEY`. Scope the Cloudflare token to the SOLFV account
+   and Worker only.
+2. On this tunnel machine, `scripts/sync-engine.ps1` can run every five minutes
+   to fast-forward `main`. It rebuilds and health-checks the engine only when
+   `engine/` changed, and skips the update rather than overwriting a dirty
+   checkout. Schedule it with Windows Task Scheduler after committing the
+   deployment files.
 
 ---
 

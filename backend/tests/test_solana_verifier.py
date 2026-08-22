@@ -5,8 +5,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
-from app.solana_verifier import PaymentVerificationError, SolanaPaymentVerifier  # noqa: E402
-
+from app.solana_verifier import PaymentVerificationError, SolanaPaymentVerifier
 
 ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 

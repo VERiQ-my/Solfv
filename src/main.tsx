@@ -1,7 +1,6 @@
 import { Component, StrictMode } from 'react'
 import type { ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import './polyfills'
 import App from './App'
 import './styles.css'
 

@@ -5,10 +5,10 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
-from app import payment_api  # noqa: E402
-from app.main import app  # noqa: E402
-from app.payment_ledger import PaymentLedger  # noqa: E402
-from app.verify_hash import payment_memo_for_verify_result  # noqa: E402
+from app import payment_api
+from app.main import app
+from app.payment_ledger import PaymentLedger
+from app.verify_hash import payment_memo_for_verify_result
 
 
 def test_simulated_x402_challenge_and_unlock(tmp_path: Path, monkeypatch) -> None:
