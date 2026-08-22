@@ -9,6 +9,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
 import type { HistoryResult } from '../types'
 
+const RETRY_DELAYS_MS = [0, 750, 2_000]
+
 export function useHistory(limit = 100) {
   const [result, setResult] = useState<HistoryResult | null>(null)
   const [loading, setLoading] = useState(true)
@@ -17,13 +19,27 @@ export function useHistory(limit = 100) {
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+    let lastError: unknown = null
+
     try {
-      setResult(await api.history(limit))
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught))
+      for (const [attempt, delay] of RETRY_DELAYS_MS.entries()) {
+        if (delay) await new Promise(resolve => window.setTimeout(resolve, delay))
+        try {
+          const next = await api.history(limit)
+          if (next.available || attempt === RETRY_DELAYS_MS.length - 1) {
+            setResult(next)
+            return
+          }
+          lastError = next.reason || 'The audit history is temporarily unavailable.'
+        } catch (caught) {
+          lastError = caught
+        }
+      }
     } finally {
       setLoading(false)
     }
+
+    setError(lastError instanceof Error ? lastError.message : String(lastError))
   }, [limit])
 
   useEffect(() => { void load() }, [load])
