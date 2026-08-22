@@ -5,15 +5,11 @@ they must satisfy.
 Backend imports from here. Do not retype these prompts into extract.py.
 
 Provider note (matters for extract.py):
-  DeepSeek vision is `deepseek-v4-flash-vision-exp` only - deepseek-chat and
-  plain V4 are text-only and 400 on image input. That model has NO documented
-  JSON output mode, so strict JSON is prompt-enforced plus parse_llm_json()
-  plus the single retry, not response_format. Images are accepted in USER
-  messages only. Each image is squeezed to an upper bound of ~384 tokens
-  regardless of its pixel size, so send a CROP of the statement table rather
-  than a whole A4 page - the token cost is identical and the effective
-  resolution on small figures is several times better. Up to 600 images per
-  request, so tiling a dense page is free.
+  The current DeepSeek API accepts the native text extracted from targeted PDF
+  pages. Page markers are retained in that text so every returned item can
+  identify its source page. Strict JSON is prompt-enforced, then parsed and
+  retried once; malformed output is an extraction failure, never a reason to
+  substitute a demo document.
 """
 
 from __future__ import annotations
@@ -36,7 +32,7 @@ _KEY_LIST = "\n".join(f"  {k}" for k in CANONICAL_KEYS)
 # Prompt 1 - line item extraction from financial statement page images
 # --------------------------------------------------------------------------
 
-EXTRACTION_PROMPT = f"""You are reading page images from a Malaysian annual report's audited financial statements. Transcribe figures. You are not analysing anything.
+EXTRACTION_PROMPT = f"""You are reading native text extracted from labelled pages of a Malaysian annual report's audited financial statements. Transcribe figures. You are not analysing anything.
 
 Return ONLY these canonical keys. Anything not on this list is not reported:
 {_KEY_LIST}
@@ -50,7 +46,7 @@ Rules, in order of importance:
    - a dash, "-", "nil" or a blank cell means the line is absent -> omit the key
    - do NOT rescale. If the column header says RM'000, leave the number as printed and report "unit": "thousands".
 3. Report the CURRENT financial year in "line_items" and the immediately preceding comparative year in "prior_period.line_items". Statements print them side by side; the current year is almost always the left-hand numeric column. If there is no comparative column, omit "prior_period".
-4. "page" is the page number I gave you with the image, not the number printed on the paper.
+4. "page" is the page number in the `--- PAGE N ---` marker, not the number printed on the paper.
 5. "label_as_printed" is the row caption copied verbatim from the document, in its original wording.
 6. Set "bbox" to null and "trust" to "UNVERIFIED" on every item. Both are filled in downstream. Never guess coordinates.
 7. If a key appears more than once across the pages, report the consolidated Group figure, not the Company-only figure.
@@ -105,7 +101,7 @@ Rules:
 3. Skip forward-looking statements ("we expect", "we aim to", "in the coming year"). We test what management claimed HAPPENED, not what they hope will happen.
 4. Skip anything already stated as a bare number ("revenue rose 4%"). We are looking for the qualitative claim, which is where the gap between narrative and arithmetic lives.
 5. Return at most 8 claims, the most substantive first.
-6. "page" is the page number I gave you with the image.
+6. "page" is the page number in the `--- PAGE N ---` marker.
 
 Guide to mapping the usual phrasings:
   "strong liquidity", "healthy cash position", "ample headroom"  -> current_ratio

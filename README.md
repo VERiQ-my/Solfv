@@ -60,8 +60,8 @@ are accepted), or from the real environment, which always wins.
 | `DATABASE_URL` | unset | Preferred server-side PostgreSQL/Supabase connection for the audit history. |
 | `SUPABASE_URL` | unset | REST fallback for audit history. Accepts the project URL or the `/rest/v1` endpoint. |
 | `SUPABASE_ANON_KEY` | unset | REST fallback key. `SUPABASE_SERVICE_KEY` is used in preference if set. |
-| `DEEPSEEK_API_KEY` | unset | Enables live vision extraction. Without it, uploads fall back to the verified fixture and say so in the UI. |
-| `DEEPSEEK_VISION_MODEL` | `deepseek-v4-flash-vision-exp` | The only DeepSeek model that accepts images. |
+| `DEEPSEEK_API_KEY` | unset | Enables live extraction from the uploaded PDF's targeted, locally redacted native text. Without it, uploads fail clearly; they never use a demo fixture. |
+| `DEEPSEEK_EXTRACTION_MODEL` | `deepseek-v4-flash` | DeepSeek model used to transcribe the targeted native text. |
 | `PAYMENT_REQUIRED` | `false` | Enforces the Solana metering gate. Deliberately off. |
 | `SOLANA_TREASURY` | unset | Settlement address. |
 | `VITE_API_BASE` | `http://127.0.0.1:8000` | Where the frontend looks for the engine. |

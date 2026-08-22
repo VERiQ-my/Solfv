@@ -1,28 +1,20 @@
 """Section 5.1 (11:30-12:45) - page images to Contract 1.
 
 The prompts are the Data lane's and are imported, never retyped. This module
-owns only the transport: call the vision model, parse strictly, retry once,
-validate, and fall back to the hand-transcribed fixture when the provider is
-unavailable.
+owns only the transport: call the extraction model, parse strictly, retry once,
+and validate. Provider failures are returned for the uploaded document; they
+never become a hand-transcribed fixture.
 
-DeepSeek specifics that matter (handoff section 5):
+DeepSeek's current API accepts the native text extracted from a PDF. The
+provider call therefore receives only the locally redacted text of the pages
+targeted by ``pages.py``; it never receives a fixture in place of an upload.
 
-* Vision is `deepseek-v4-flash-vision-exp` only - `deepseek-chat` and plain V4
-  are text-only and 400 on image input.
-* No JSON mode on that model. Strict JSON is prompt-enforced, then
-  `parse_llm_json`, then the one retry. `response_format` is not an option.
-* Images go in user messages only.
-* Every image costs ~384 tokens regardless of pixel size, so a crop of the
-  statement table beats a full A4 page at identical cost.
-
-The fixture fallback is not a shortcut. The vision model is experimental and
-this runs live in front of judges; a hand-verified extraction is the insurance
-that the reconciliation engine still has something real to reconcile.
+Fixtures remain available only through the explicit demo endpoints. They are
+never an insurance policy for a user's uploaded document.
 """
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 import pathlib
@@ -42,8 +34,8 @@ FIXTURES = ROOT / "fixtures"
 
 API_URL = os.getenv("DEEPSEEK_API_URL", "https://api.deepseek.com/chat/completions")
 API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-VISION_MODEL = os.getenv("DEEPSEEK_VISION_MODEL", "deepseek-v4-flash-vision-exp")
-TEXT_MODEL = os.getenv("DEEPSEEK_TEXT_MODEL", "deepseek-chat")
+EXTRACTION_MODEL = os.getenv("DEEPSEEK_EXTRACTION_MODEL", "deepseek-v4-flash")
+TEXT_MODEL = os.getenv("DEEPSEEK_TEXT_MODEL", "deepseek-v4-flash")
 TIMEOUT = int(os.getenv("DEEPSEEK_TIMEOUT", "90"))
 
 
@@ -58,11 +50,6 @@ class ExtractionError(RuntimeError):
 # ---------------------------------------------------------------------------
 # Transport
 # ---------------------------------------------------------------------------
-
-def _encode(path: str | pathlib.Path) -> str:
-    data = pathlib.Path(path).read_bytes()
-    return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
-
 
 def _post(payload: dict) -> str:
     request = urllib.request.Request(
@@ -89,14 +76,14 @@ def _post(payload: dict) -> str:
         raise ExtractionError("DeepSeek response had no message content") from error
 
 
-def _call_vision(prompt: str, image_paths: list[str]) -> str:
-    # Images in user messages only - anything else is a 400.
-    content: list[dict] = [{"type": "text", "text": prompt}]
-    for path in image_paths:
-        content.append({"type": "image_url", "image_url": {"url": _encode(path)}})
+def _call_extraction(prompt: str, document_text: str) -> str:
+    """Extract from the attached document's native text, never a demo fixture."""
     return _post({
-        "model": VISION_MODEL,
-        "messages": [{"role": "user", "content": content}],
+        "model": EXTRACTION_MODEL,
+        "messages": [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": document_text},
+        ],
         "temperature": 0,
     })
 
@@ -128,18 +115,20 @@ def _parse_with_retry(call, prompt, argument) -> dict:
 # Extraction
 # ---------------------------------------------------------------------------
 
-def extract(statement_images: list[str], narrative_images: list[str] | None = None
-            ) -> tuple[dict, list[str]]:
-    """Run both passes and merge into one Contract 1 document."""
+def extract_text(statement_text: str, narrative_text: str = "") -> tuple[dict, list[str]]:
+    """Run both passes over the attached PDF's locally redacted native text."""
     if not available():
         raise ExtractionError("DEEPSEEK_API_KEY is not set")
 
-    doc = _parse_with_retry(_call_vision, EXTRACTION_PROMPT, statement_images)
+    if not statement_text.strip():
+        raise ExtractionError("No financial-statement text was found in the targeted pages")
+
+    doc = _parse_with_retry(_call_extraction, EXTRACTION_PROMPT, statement_text)
 
     warnings: list[str] = []
-    if narrative_images:
+    if narrative_text.strip():
         try:
-            narrative = _parse_with_retry(_call_vision, NARRATIVE_PROMPT, narrative_images)
+            narrative = _parse_with_retry(_call_extraction, NARRATIVE_PROMPT, narrative_text)
             doc["narrative_claims"] = narrative.get("narrative_claims") or []
         except (ExtractionError, ValueError) as error:
             # A missing narrative costs us the Say-Do Gap, not the dashboard.

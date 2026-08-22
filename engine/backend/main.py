@@ -183,7 +183,7 @@ def _run(record: dict, extraction: dict, market_data: dict | None) -> dict:
 @app.post("/upload")
 async def upload(request: Request, file: UploadFile = File(...)) -> JSONResponse:
     """Ingest one document. PDFs go through page targeting, privacy masking and
-    the vision model; spreadsheets skip straight to Contract 1."""
+    live extraction from their native text; spreadsheets skip straight to Contract 1."""
     name = pathlib.Path(file.filename or "upload").name
     suffix = pathlib.Path(name).suffix.lower()
     if suffix not in (".pdf", ".xlsx", ".xls"):
@@ -223,28 +223,28 @@ def _ingest_pdf(record: dict, path: pathlib.Path) -> dict:
     # machine - that is the only way the "zero transmitted" claim is checkable.
     ledger = privacy.ledger(texts, statement_pages + narrative_pages)
 
+    def redacted_text(pages: list[int]) -> str:
+        """Number pages so the model can return traceable source locations."""
+        chunks: list[str] = []
+        for page in pages:
+            text = texts.get(page, "")
+            if not text:
+                continue
+            masked, _ = privacy.mask_text(text)
+            chunks.append(f"--- PAGE {page} ---\n{masked}")
+        return "\n\n".join(chunks)
+
     images = ingest.render_pages(path, statement_pages + narrative_pages, record["dir"])
 
-    extraction: dict
-    if extract.available():
-        try:
-            extraction, extraction_warnings = extract.extract(
-                [images[p] for p in statement_pages if p in images],
-                [images[p] for p in narrative_pages if p in images],
-            )
-            warnings.extend(extraction_warnings)
-        except extract.ExtractionError as error:
-            warnings.append(
-                f"Vision extraction failed ({error}); fell back to the "
-                f"hand-verified fixture."
-            )
-            extraction = extract.load_fixture("clean")
-    else:
-        warnings.append(
-            "DEEPSEEK_API_KEY is not set; using the hand-verified fixture "
-            "extraction for this document."
+    try:
+        extraction, extraction_warnings = extract.extract_text(
+            redacted_text(statement_pages), redacted_text(narrative_pages),
         )
-        extraction = extract.load_fixture("clean")
+        warnings.extend(extraction_warnings)
+    except extract.ExtractionError as error:
+        # A user's upload must never be displayed as the Seacera demo. The
+        # caller keeps the original filename and receives the real cause.
+        raise ingest.IngestError(f"Could not extract this uploaded document: {error}") from error
 
     # Reverse-lookup every figure to a source cell. A miss stays a miss: it
     # becomes UNVERIFIED downstream rather than being quietly filled in.
