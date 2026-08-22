@@ -11,6 +11,7 @@
 
 import { useCallback, useRef, useState } from 'react'
 import Benchmark from './Benchmark'
+import CryptoCandidates from './CryptoCandidates'
 import Overview from './Overview'
 import Provenance from './Provenance'
 import Risk from './Risk'
@@ -71,6 +72,7 @@ export default function Analysis() {
       {effective === 'saydo' && <SayDo />}
       {effective === 'benchmark' && <Benchmark />}
       {effective === 'risk' && <Risk />}
+      {effective === 'candidates' && <CryptoCandidates />}
     </>
   )
 }

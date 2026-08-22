@@ -15,6 +15,18 @@ is withheld rather than estimated.
 
 ---
 
+## Submission and current payment scope
+
+Submission materials are in [`submission/`](submission/), including the Devpost
+description, Solana Lab entry, local judge runbook, technical scope, and the
+video script. The video file is intentionally not included.
+
+Financial analysis is free. The optional paper-investment workflow is protected
+by a Solana devnet x402-style payment challenge. Phantom signs a small devnet
+USDC payment; the backend verifies it and creates a simulated paper-order
+receipt using live crypto pricing. No real cryptocurrency is purchased,
+transferred, or held.
+
 ## Running it
 
 Two processes: the Python engine and the Vite frontend.

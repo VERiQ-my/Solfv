@@ -13,11 +13,13 @@
 
 import { useEffect, useState } from 'react'
 import {
-  Card, Icon, NotConfigured, PageIntro, Spinner, Stat,
+  Card, Empty, Icon, NotConfigured, PageIntro, Spinner, Stat,
 } from '../components/ui'
 import { api } from '../lib/api'
 import { useSession } from '../state'
-import type { PaymentQuote, SolanaNetwork } from '../types'
+import type {
+  PaperStatus, PaymentQuote, PaymentRecord, SolanaNetwork,
+} from '../types'
 
 export default function Solana() {
   const { analysis, documents } = useSession()
@@ -246,6 +248,8 @@ export default function Solana() {
             </p>
           </Card>
 
+          <PaperOrderPanel />
+
           <Card title="Not built, and not faked" icon="construction">
             <p className="text-body-md text-on-surface-variant">
               Asset tokenisation, B2B settlement rails and programmatic payroll all belong on
@@ -272,5 +276,173 @@ export default function Solana() {
         </>
       )}
     </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Paper-order panel — the ledger view for the x402 flow                       */
+/*                                                                            */
+/*   Reads /paper/status for what settlement is bound to, and /paper/history   */
+/*   for every verified payment on the ledger. Individual payments settle on   */
+/*   the Crypto Candidates tab; this panel is the audit trail.                 */
+/* -------------------------------------------------------------------------- */
+
+function PaperOrderPanel() {
+  const [status, setStatus] = useState<PaperStatus | null>(null)
+  const [rows, setRows] = useState<PaymentRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let live = true
+    setLoading(true)
+    Promise.all([api.paperStatus(), api.paperHistory(50)])
+      .then(([nextStatus, history]) => {
+        if (!live) return
+        setStatus(nextStatus)
+        setRows(history.rows)
+      })
+      .catch(caught => live && setError(
+        caught instanceof Error ? caught.message : String(caught)))
+      .finally(() => live && setLoading(false))
+    return () => { live = false }
+  }, [])
+
+  return (
+    <Card
+      title="Devnet x402 paper-order ledger"
+      subtitle="Every verified USDC settlement, and the paper order it unlocked. This is the SOLANA TRACK flow."
+      icon="receipt_long"
+    >
+      {error && (
+        <div className="flex items-start gap-md p-md rounded-md
+                        border border-danger/30 bg-danger/5">
+          <Icon name="error" className="text-danger shrink-0" />
+          <div className="min-w-0">
+            <b className="block text-body-md text-primary">Could not read the paper-order ledger.</b>
+            <p className="text-body-sm text-on-surface-variant mt-xs break-words">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {status && (
+        <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-md mb-md">
+          <div className="rounded-md bg-surface-container-low p-md">
+            <dt className="eyebrow">Network</dt>
+            <dd className="mono text-body-md text-primary mt-xs">{status.network}</dd>
+            <small className={`text-body-sm mt-xs block ${
+              status.rpc.reachable ? 'text-success' : 'text-danger'}`}>
+              {status.rpc.reachable
+                ? `slot ${status.rpc.slot?.toLocaleString()}`
+                : status.rpc.reason || 'unreachable'}
+            </small>
+          </div>
+          <div className="rounded-md bg-surface-container-low p-md">
+            <dt className="eyebrow">Settlement</dt>
+            <dd className="mono text-body-md text-primary mt-xs">
+              {status.amount_usdc} USDC
+            </dd>
+            <small className="text-body-sm text-on-surface-variant mt-xs block">
+              {status.amount_base_units.toLocaleString()} base units
+            </small>
+          </div>
+          <div className="rounded-md bg-surface-container-low p-md">
+            <dt className="eyebrow">Ledger backend</dt>
+            <dd className="mono text-body-md text-primary mt-xs">
+              {status.ledger.backend ?? '—'}
+            </dd>
+            <small className={`text-body-sm mt-xs block ${
+              status.ledger.backend === 'postgres' ? 'text-success' : 'text-on-surface-variant'}`}>
+              {status.ledger.backend === 'postgres'
+                ? 'Supabase Postgres'
+                : status.ledger.backend === 'sqlite'
+                  ? 'local SQLite fallback'
+                  : status.ledger.reason || 'not initialised'}
+            </small>
+          </div>
+          <div className="rounded-md bg-surface-container-low p-md">
+            <dt className="eyebrow">Payments recorded</dt>
+            <dd className="mono text-body-md text-primary mt-xs">{rows.length}</dd>
+            <small className="text-body-sm text-on-surface-variant mt-xs block">
+              verified on the ledger
+            </small>
+          </div>
+        </dl>
+      )}
+
+      {status?.recipient && (
+        <div className="rounded-md border border-hairline p-md mb-md">
+          <span className="eyebrow">Merchant wallet (devnet)</span>
+          <b className="mono block text-body-sm text-primary mt-xs break-all">
+            {status.recipient}
+          </b>
+          <a className="btn-ghost btn-sm mt-sm -ml-sm"
+             href={`https://explorer.solana.com/address/${status.recipient}?cluster=${status.network}`}
+             target="_blank" rel="noreferrer noopener">
+            View on Solana Explorer
+            <Icon name="open_in_new" className="text-[14px]" />
+          </a>
+        </div>
+      )}
+
+      {loading ? <Spinner label="Reading the payment ledger…" /> : rows.length === 0 ? (
+        <Empty
+          icon="inbox"
+          title="No paper orders yet"
+          body="Every verified devnet USDC payment lands here. Open the Analysis → Crypto Candidates tab and click 'Simulate purchase' on a candidate to add the first one."
+        />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="data-table min-w-[900px]">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Resource</th>
+                <th>Signature</th>
+                <th>Payer</th>
+                <th>Slot</th>
+                <th className="text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(row => {
+                // resource_key has shape "session:{sid}:asset:{id}:usd:{amount}"
+                const parts = row.resource_key.split(':')
+                const asset = parts[3] ?? '—'
+                const usd = parts[5] ?? '—'
+                return (
+                  <tr key={String(row.id)} className="row-hover">
+                    <td className="mono text-body-sm text-on-surface-variant">
+                      {new Date(row.created_at).toLocaleString()}
+                    </td>
+                    <td>
+                      <b className="mono uppercase text-body-md text-primary">{asset}</b>
+                      <small className="block text-body-sm text-on-surface-variant">${usd} notional</small>
+                    </td>
+                    <td className="mono text-body-sm">
+                      <a href={`https://explorer.solana.com/tx/${row.transaction_signature}?cluster=${row.network}`}
+                         target="_blank" rel="noreferrer noopener"
+                         className="text-secondary hover:underline">
+                        {row.transaction_signature.slice(0, 8)}…{row.transaction_signature.slice(-8)}
+                        <Icon name="open_in_new" className="text-[12px] ml-xs" />
+                      </a>
+                    </td>
+                    <td className="mono text-body-sm text-on-surface-variant break-all">
+                      {row.payer_wallet.slice(0, 6)}…{row.payer_wallet.slice(-6)}
+                    </td>
+                    <td className="mono text-right text-body-sm">
+                      {row.slot?.toLocaleString() ?? '—'}
+                    </td>
+                    <td className="mono text-right text-primary">
+                      {(row.expected_amount_base_units / 1_000_000).toFixed(3)} USDC
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   )
 }
