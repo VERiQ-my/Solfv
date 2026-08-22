@@ -20,16 +20,32 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
+
+try:
+    import psycopg
+    from psycopg import sql
+    from psycopg.rows import dict_row
+    from psycopg.types.json import Jsonb
+except ImportError:
+    psycopg = None
+    sql = None
+    dict_row = None
+    Jsonb = None
 
 # Accept both the plain host and the REST endpoint, since either is a
 # reasonable thing to paste out of the Supabase dashboard.
 _RAW_URL = (os.getenv("SUPABASE_URL") or os.getenv("SUPABASE_API_URL") or "").strip()
 KEY = (os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_ANON_KEY") or "").strip()
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 TABLE = os.getenv("SUPABASE_TABLE", "analyses")
 TIMEOUT = int(os.getenv("SUPABASE_TIMEOUT", "10"))
+
+if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", TABLE):
+    raise ValueError("SUPABASE_TABLE must be a simple PostgreSQL table name.")
 
 
 def _rest_base(raw: str) -> str:
@@ -45,13 +61,22 @@ REST = _rest_base(_RAW_URL)
 
 
 def configured() -> bool:
-    return bool(REST and KEY)
+    return bool(DATABASE_URL and psycopg) or bool(REST and KEY)
+
+
+def _mode() -> str | None:
+    """Use direct server-side PostgreSQL when DATABASE_URL is configured."""
+    if DATABASE_URL and psycopg:
+        return "postgresql"
+    if REST and KEY:
+        return "supabase_rest"
+    return None
 
 
 def status() -> dict:
     return {
         "configured": configured(),
-        "url": REST or None,
+        "connection": _mode(),
         "table": TABLE,
         "stores": "reconciled analysis results only",
         "never_stores": ["uploaded documents", "page images", "personal data"],
@@ -79,6 +104,51 @@ def _request(method: str, path: str, body: object | None = None,
         return error.code, detail
     except Exception as error:  # noqa: BLE001 - DNS, TLS, timeout: all non-fatal
         return 0, str(error)
+
+
+# ---------------------------------------------------------------------------
+# Direct PostgreSQL (DATABASE_URL)
+# ---------------------------------------------------------------------------
+
+_JSON_COLUMNS = {
+    "ratios", "prior_ratios", "checks", "line_items", "say_do_gap", "benchmark",
+}
+
+
+def _db_row(row: dict) -> dict:
+    """Wrap structured payloads so PostgreSQL receives JSONB values."""
+    if Jsonb is None:
+        return row
+    return {key: Jsonb(value) if key in _JSON_COLUMNS else value for key, value in row.items()}
+
+
+def _connection():
+    if psycopg is None:
+        raise RuntimeError("psycopg is not installed; install engine requirements.")
+    return psycopg.connect(DATABASE_URL, connect_timeout=TIMEOUT, autocommit=True)
+
+
+def _json_safe(value: object) -> object:
+    """Convert UUID/timestamp values from psycopg into API-safe JSON values."""
+    return json.loads(json.dumps(value, default=str))
+
+
+def _direct_save(row: dict) -> dict:
+    columns = tuple(row)
+    statement = sql.SQL("INSERT INTO {} ({}) VALUES ({}) RETURNING id, created_at").format(
+        sql.Identifier("public", TABLE),
+        sql.SQL(", " ).join(map(sql.Identifier, columns)),
+        sql.SQL(", " ).join(sql.Placeholder() for _ in columns),
+    )
+    try:
+        with _connection() as connection, connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(statement, tuple(_db_row(row).values()))
+            saved = cursor.fetchone() or {}
+        return {"saved": True, "id": str(saved.get("id")) if saved.get("id") else None,
+                "created_at": saved.get("created_at").isoformat()
+                if saved.get("created_at") else None}
+    except Exception as error:  # noqa: BLE001 - persistence must fail soft
+        return {"saved": False, "reason": f"PostgreSQL write failed: {error}"}
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +209,8 @@ def _row(result: dict, record: dict, ledger: dict | None) -> dict:
 
 def save(result: dict, record: dict, ledger: dict | None = None) -> dict:
     """Persist one reconciled analysis. Never raises."""
+    if _mode() == "postgresql":
+        return _direct_save(_row(result, record, ledger))
     if not configured():
         return {"saved": False, "reason": "Supabase is not configured."}
 
@@ -164,9 +236,47 @@ _LIST_COLUMNS = (
 )
 
 
+def _direct_history(limit: int) -> dict:
+    try:
+        with _connection() as connection, connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(
+                sql.SQL("SELECT {} FROM {} ORDER BY created_at DESC LIMIT %s").format(
+                    sql.SQL(", " ).join(map(sql.Identifier, _LIST_COLUMNS.split(","))),
+                    sql.Identifier("public", TABLE),
+                ),
+                (limit,),
+            )
+            rows = cursor.fetchall()
+        return {"available": True, "rows": _json_safe(rows)}
+    except Exception as error:  # noqa: BLE001 - dashboard remains non-blocking
+        return {"available": False, "rows": [], "reason": f"PostgreSQL read failed: {error}"}
+
+
+def _direct_get(row_id: str) -> dict | None:
+    try:
+        with _connection() as connection, connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(sql.SQL("SELECT * FROM {} WHERE id = %s LIMIT 1").format(
+                sql.Identifier("public", TABLE)), (row_id,))
+            return _json_safe(cursor.fetchone())
+    except Exception:  # noqa: BLE001 - callers treat unavailable as not found
+        return None
+
+
+def _direct_ping() -> dict:
+    try:
+        with _connection() as connection, connection.cursor() as cursor:
+            cursor.execute(sql.SQL("SELECT id FROM {} LIMIT 1").format(
+                sql.Identifier("public", TABLE)))
+        return {"ok": True}
+    except Exception as error:  # noqa: BLE001
+        return {"ok": False, "reason": f"PostgreSQL unavailable: {error}"}
+
+
 def history(limit: int = 50) -> dict:
     """Recent analyses, newest first. Summary columns only — the heavy JSONB
     payloads are fetched per row on demand."""
+    if _mode() == "postgresql":
+        return _direct_history(limit)
     if not configured():
         return {"available": False, "rows": [],
                 "reason": "Supabase is not configured."}
@@ -182,6 +292,8 @@ def history(limit: int = 50) -> dict:
 
 
 def get(row_id: str) -> dict | None:
+    if _mode() == "postgresql":
+        return _direct_get(row_id)
     if not configured():
         return None
     code, body = _request("GET", f"/{TABLE}?id=eq.{row_id}&select=*&limit=1")
@@ -191,8 +303,12 @@ def get(row_id: str) -> dict | None:
 
 
 def ping() -> dict:
+    if _mode() == "postgresql":
+        return _direct_ping()
     """Cheap connectivity probe for /health — confirms the table is reachable."""
     if not configured():
+        if DATABASE_URL:
+            return {"ok": False, "reason": "PostgreSQL driver is not installed."}
         return {"ok": False, "reason": "Supabase is not configured."}
     code, body = _request("GET", f"/{TABLE}?select=id&limit=1")
     if code == 200:

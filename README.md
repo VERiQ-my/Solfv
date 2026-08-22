@@ -45,8 +45,9 @@ are accepted), or from the real environment, which always wins.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `SUPABASE_URL` | unset | Enables the audit history. Accepts the project URL or the `/rest/v1` endpoint. |
-| `SUPABASE_ANON_KEY` | unset | The full anon JWT. `SUPABASE_SERVICE_KEY` is used in preference if set. |
+| `DATABASE_URL` | unset | Preferred server-side PostgreSQL/Supabase connection for the audit history. |
+| `SUPABASE_URL` | unset | REST fallback for audit history. Accepts the project URL or the `/rest/v1` endpoint. |
+| `SUPABASE_ANON_KEY` | unset | REST fallback key. `SUPABASE_SERVICE_KEY` is used in preference if set. |
 | `DEEPSEEK_API_KEY` | unset | Enables live vision extraction. Without it, uploads fall back to the verified fixture and say so in the UI. |
 | `DEEPSEEK_VISION_MODEL` | `deepseek-v4-flash-vision-exp` | The only DeepSeek model that accepts images. |
 | `PAYMENT_REQUIRED` | `false` | Enforces the Solana metering gate. Deliberately off. |
@@ -114,8 +115,10 @@ would be the exposure. There is no code path in `backend/store.py` that can
 write a document, an image, or a PII value, and no column in the schema that
 could hold one.
 
-**Setup:** run `engine/schema.sql` once in the Supabase SQL editor, then set
-`SUPABASE_URL` and `SUPABASE_ANON_KEY`. Check it with:
+**Setup:** set `DATABASE_URL`, install the engine requirements, and apply the
+schema once with `cd engine && .venv/Scripts/python scripts/migrate.py`.
+Alternatively, run `engine/schema.sql` in the Supabase SQL editor and use the
+`SUPABASE_URL` plus `SUPABASE_ANON_KEY` REST fallback. Check either with:
 
 ```bash
 curl -s localhost:8000/health | python -m json.tool   # look at "storage"
