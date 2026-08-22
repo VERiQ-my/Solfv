@@ -82,4 +82,5 @@ export const ANALYSIS_TABS: {
   { id: 'saydo', label: 'Say–Do Gap', icon: 'balance', needsDocument: true },
   { id: 'benchmark', label: 'Sector Benchmark', icon: 'leaderboard', needsDocument: true },
   { id: 'risk', label: 'Credit Risk', icon: 'monitoring', needsDocument: true },
+  { id: 'candidates', label: 'Crypto Candidates', icon: 'currency_bitcoin', needsDocument: true },
 ]

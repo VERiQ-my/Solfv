@@ -25,7 +25,8 @@ from pydantic import BaseModel
 from analysis.pipeline import analyse
 from analysis.query import resolve_query
 
-from . import auth, extract, ingest, market, payment, privacy, session, store
+from . import (advisor, auth, crypto, extract, ingest, market, paper_order,
+                payment, privacy, session, store)
 from .bbox import resolve_bboxes
 from .pages import resolve_pages
 
@@ -40,7 +41,8 @@ app = FastAPI(title="SOLFV", version="1.0",
               description="LLM extracts, deterministic math verifies.")
 
 _cors_origins = [origin.strip() for origin in os.getenv(
-    "SOLFV_CORS_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173",
+    "SOLFV_CORS_ORIGINS",
+    "http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:3001,http://localhost:3001,http://127.0.0.1:5173,http://localhost:5173",
 ).split(",") if origin.strip()]
 
 app.add_middleware(
@@ -512,6 +514,227 @@ def market_timeseries(
 
 
 # ---------------------------------------------------------------------------
+# Crypto market data (CoinGecko) + AI research advisor (DeepSeek)
+#
+# The market feed is proxied through the engine so the CoinGecko key never
+# reaches the browser. The advisor is a companion to the reconciliation
+# pipeline: it takes the analysis that already exists on the session and
+# shortlists crypto assets from the CoinGecko snapshot for a human to review.
+# It is deliberately framed as *research candidates*, not investment advice.
+# ---------------------------------------------------------------------------
+
+@app.get("/crypto/status")
+def crypto_status() -> dict:
+    return {"market": crypto.status(), "advisor": advisor.status()}
+
+
+@app.get("/crypto/market")
+def crypto_market(limit: int = crypto.DEFAULT_TOP_N) -> JSONResponse:
+    try:
+        rows = crypto.top_markets(limit=min(max(limit, 1), 100))
+    except crypto.CryptoError as error:
+        raise HTTPException(503, str(error)) from error
+    return JSONResponse({
+        "provider": "CoinGecko",
+        "vs_currency": crypto.VS_CURRENCY,
+        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "assets": rows,
+    })
+
+
+class AdvisorRequest(BaseModel):
+    limit: int | None = None
+
+
+@app.post("/advisor/{sid}")
+def advisor_recommend(sid: str, body: AdvisorRequest, request: Request) -> JSONResponse:
+    """Research candidates for the selected reconciled document. Free — the
+    payment gate is reserved for paper-order execution, not analysis."""
+    record = _require(sid, request.state.user.id)
+    analysis_result = record.get("analysis")
+    if analysis_result is None:
+        raise HTTPException(409, "This session has no completed analysis.")
+
+    limit = body.limit or crypto.DEFAULT_TOP_N
+    snapshot, snapshot_reason = crypto.snapshot(limit=min(max(limit, 1), 100))
+    report = advisor.recommend(analysis_result, snapshot, snapshot_reason)
+    return JSONResponse(report)
+
+
+# ---------------------------------------------------------------------------
+# Solana devnet x402 paper-order flow (SOLANA TRACK)
+#
+# The full flow lives here: HTTP 402 challenge → Phantom signs USDC + memo →
+# backend verifies on-chain against RPC → Supabase ledger writes the payment
+# → paper-order receipt returned. Financial analysis stays free; only the
+# simulated purchase is metered.
+# ---------------------------------------------------------------------------
+
+@app.get("/paper/status")
+def paper_status() -> dict:
+    return {
+        "network": paper_order.NETWORK,
+        "rpc_url": paper_order.RPC_URL,
+        "usdc_mint": paper_order.USDC_MINT,
+        "usdc_decimals": paper_order.USDC_DECIMALS,
+        "recipient": paper_order.RECIPIENT,
+        "amount_base_units": paper_order.AMOUNT_BASE_UNITS,
+        "amount_usdc": paper_order.AMOUNT_BASE_UNITS / (10 ** paper_order.USDC_DECIMALS),
+        "caip_network": paper_order.SOLANA_CAIP,
+        "memo_prefix": paper_order.MEMO_PREFIX,
+        "rpc": paper_order.rpc_status(),
+        "ledger": paper_order.ledger_status(),
+    }
+
+
+@app.get("/paper/{sid}/quote")
+def paper_quote(sid: str, asset_id: str, notional_usd: float,
+                request: Request) -> JSONResponse:
+    """Return the x402 payment requirements for a paper order without
+    actually issuing a 402 — used by the UI to show the payment card before
+    the user clicks 'connect Phantom'."""
+    record = _require(sid, request.state.user.id)
+    analysis_result = record.get("analysis")
+    if analysis_result is None:
+        raise HTTPException(409, "This session has no completed analysis.")
+
+    resource_key = paper_order.resource_key_for(sid, asset_id, notional_usd)
+    memo = paper_order.memo_for(analysis_result)
+    return JSONResponse({
+        "resource_key": resource_key,
+        "verify_hash": paper_order.verify_hash(analysis_result),
+        "requirements": paper_order.requirements(resource_key, memo),
+        "already_paid": paper_order.get_verified(
+            resource_key, paper_order.verify_hash(analysis_result)) is not None,
+    })
+
+
+class VerifyPaymentBody(BaseModel):
+    asset_id: str
+    notional_usd: float
+    transaction_signature: str
+
+
+@app.post("/paper/{sid}/verify-payment")
+def paper_verify_payment(sid: str, body: VerifyPaymentBody,
+                          request: Request) -> JSONResponse:
+    """Verify the tx that Phantom just landed. On success the ledger row is
+    persisted; on failure we return the specific reason."""
+    record = _require(sid, request.state.user.id)
+    analysis_result = record.get("analysis")
+    if analysis_result is None:
+        raise HTTPException(409, "This session has no completed analysis.")
+
+    resource_key = paper_order.resource_key_for(sid, body.asset_id, body.notional_usd)
+    memo = paper_order.memo_for(analysis_result)
+    vhash = paper_order.verify_hash(analysis_result)
+
+    try:
+        verification = paper_order.verify_signature(body.transaction_signature, memo)
+    except paper_order.PaymentError as error:
+        raise HTTPException(402, str(error)) from error
+
+    try:
+        row = paper_order.record_verified(paper_order.VerifiedPayment(
+            resource_key=resource_key,
+            verify_hash=vhash,
+            expected_memo=memo,
+            expected_amount_base_units=paper_order.AMOUNT_BASE_UNITS,
+            expected_mint=paper_order.USDC_MINT,
+            expected_recipient=paper_order.RECIPIENT,
+            network=paper_order.NETWORK,
+            transaction_signature=verification["transaction_signature"],
+            payer_wallet=verification["payer_wallet"],
+            commitment=verification["commitment"],
+            slot=verification.get("slot"),
+            block_time=verification.get("block_time"),
+            caller_id=request.state.user.id,
+        ))
+    except paper_order.PaymentError as error:
+        raise HTTPException(409, str(error)) from error
+
+    return JSONResponse({"status": "verified", "verify_hash": vhash,
+                          "payment": row})
+
+
+class PaperOrderBody(BaseModel):
+    asset_id: str
+    notional_usd: float
+    transaction_signature: str | None = None
+
+
+@app.post("/paper/{sid}/order")
+def paper_order_create(sid: str, body: PaperOrderBody,
+                        request: Request) -> JSONResponse:
+    """Create the simulated paper-order receipt.
+
+    Returns HTTP 402 with x402 payment requirements when there is no verified
+    payment for this (session, asset, amount) triple — the standard x402
+    challenge shape. Once a payment is on the ledger, returns the receipt.
+    """
+    record = _require(sid, request.state.user.id)
+    analysis_result = record.get("analysis")
+    if analysis_result is None:
+        raise HTTPException(409, "This session has no completed analysis.")
+    if body.notional_usd <= 0 or body.notional_usd > 100_000:
+        raise HTTPException(422, "notional_usd must be between 0 and 100,000.")
+
+    resource_key = paper_order.resource_key_for(sid, body.asset_id, body.notional_usd)
+    memo = paper_order.memo_for(analysis_result)
+    vhash = paper_order.verify_hash(analysis_result)
+
+    payment_row = paper_order.get_verified(resource_key, vhash)
+
+    # If the client already handed us a signature, verify it now (covers the
+    # single-round-trip path used by the frontend after Phantom signs).
+    if payment_row is None and body.transaction_signature:
+        try:
+            verification = paper_order.verify_signature(body.transaction_signature, memo)
+            payment_row = paper_order.record_verified(paper_order.VerifiedPayment(
+                resource_key=resource_key,
+                verify_hash=vhash,
+                expected_memo=memo,
+                expected_amount_base_units=paper_order.AMOUNT_BASE_UNITS,
+                expected_mint=paper_order.USDC_MINT,
+                expected_recipient=paper_order.RECIPIENT,
+                network=paper_order.NETWORK,
+                transaction_signature=verification["transaction_signature"],
+                payer_wallet=verification["payer_wallet"],
+                commitment=verification["commitment"],
+                slot=verification.get("slot"),
+                block_time=verification.get("block_time"),
+                caller_id=request.state.user.id,
+            ))
+        except paper_order.PaymentError as error:
+            raise HTTPException(402, str(error)) from error
+
+    if payment_row is None:
+        return JSONResponse(
+            paper_order.payment_required_body(resource_key, memo, extra={
+                "verify_hash": vhash, "resource_key": resource_key,
+            }),
+            status_code=402,
+        )
+
+    try:
+        receipt = paper_order.create_paper_order(analysis_result, body.asset_id,
+                                                  body.notional_usd, payment_row)
+    except paper_order.PaymentError as error:
+        raise HTTPException(422, str(error)) from error
+
+    return JSONResponse({"status": "paper_order_created",
+                          "resource_key": resource_key,
+                          "receipt": receipt, "payment": payment_row})
+
+
+@app.get("/paper/history")
+def paper_history(request: Request, limit: int = 50) -> JSONResponse:
+    """Recent paper-order payments. Used by the Solana Investments page."""
+    _ = request  # auth already applied at middleware
+    return JSONResponse({"rows": paper_order.recent_payments(limit)})
+
+
+# ---------------------------------------------------------------------------
 # Audit history (Supabase)
 # ---------------------------------------------------------------------------
 
@@ -539,6 +762,14 @@ def health() -> dict:
         "ok": True,
         "vision_configured": extract.available(),
         "market_configured": market.configured(),
+        "crypto_market": crypto.status(),
+        "advisor": advisor.status(),
+        "paper_order": {
+            "network": paper_order.NETWORK,
+            "amount_usdc": paper_order.AMOUNT_BASE_UNITS / (10 ** paper_order.USDC_DECIMALS),
+            "recipient": paper_order.RECIPIENT,
+            "ledger": paper_order.ledger_status(),
+        },
         "peers_loaded": bool(PEERS),
         "payment_required": payment.PAYMENT_REQUIRED,
         "auth": auth.status(),

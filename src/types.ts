@@ -16,7 +16,7 @@ export type Section =
 
 /** Lenses on the selected document, shown as tabs inside Analysis. */
 export type AnalysisTab =
-  | 'documents' | 'overview' | 'provenance' | 'saydo' | 'benchmark' | 'risk'
+  | 'documents' | 'overview' | 'provenance' | 'saydo' | 'benchmark' | 'risk' | 'candidates'
 
 /** A resolved location. `tab` is only meaningful when `section` is 'analysis'. */
 export interface Route {
@@ -315,4 +315,196 @@ export interface MarketTimeSeries {
   exchange: string | null
   interval: string
   values: Candle[]
+}
+
+/* -------------------------------------------------------------------------- */
+/* Crypto market (CoinGecko, proxied by the engine)                            */
+/* -------------------------------------------------------------------------- */
+
+export interface CryptoAsset {
+  asset_id: string
+  symbol: string | null
+  name: string | null
+  image: string | null
+  price: number | null
+  market_cap: number | null
+  market_cap_rank: number | null
+  volume_24h: number | null
+  change_24h_pct: number | null
+  change_7d_pct: number | null
+  high_24h: number | null
+  low_24h: number | null
+  ath: number | null
+  ath_change_pct: number | null
+  circulating_supply: number | null
+  vs_currency: string
+  last_updated: string | null
+}
+
+export interface CryptoMarket {
+  provider: string
+  vs_currency: string
+  fetched_at: string
+  assets: CryptoAsset[]
+}
+
+export interface CryptoStatus {
+  market: {
+    configured: boolean
+    provider: string
+    plan: string
+    vs_currency: string
+    top_n: number
+    cache_ttl: number
+    reason: string | null
+  }
+  advisor: {
+    configured: boolean
+    provider: string
+    model: string
+    max_candidates: number
+    reason: string | null
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* AI research advisor (DeepSeek, with a deterministic fallback)              */
+/* -------------------------------------------------------------------------- */
+
+export type AdvisorVerdict =
+  | 'CANDIDATE_FOR_REVIEW'
+  | 'HIGH_RISK'
+  | 'INSUFFICIENT_EVIDENCE'
+  | 'NOT_ALIGNED'
+
+export interface AdvisorCandidateMarket {
+  price: number | null
+  market_cap: number | null
+  volume_24h: number | null
+  change_24h_pct: number | null
+  change_7d_pct: number | null
+  vs_currency: string
+}
+
+export interface AdvisorCandidate {
+  asset_id: string
+  symbol: string | null
+  name: string | null
+  image: string | null
+  verdict: AdvisorVerdict
+  confidence: number
+  rationale: string[]
+  supporting_evidence: string[]
+  risk_factors: string[]
+  market_data_timestamp: string | null
+  market: AdvisorCandidateMarket
+}
+
+/* -------------------------------------------------------------------------- */
+/* Solana devnet x402 paper-order flow                                         */
+/* -------------------------------------------------------------------------- */
+
+export interface PaperStatus {
+  network: string
+  rpc_url: string
+  usdc_mint: string
+  usdc_decimals: number
+  recipient: string
+  amount_base_units: number
+  amount_usdc: number
+  caip_network: string
+  memo_prefix: string
+  rpc: {
+    network: string
+    rpc_url: string
+    recipient: string
+    usdc_mint: string
+    amount_base_units: number
+    reachable: boolean
+    slot: number | null
+    version: string | null
+    reason: string | null
+  }
+  ledger: { backend: 'postgres' | 'sqlite' | null; sqlite_path?: string; reason: string | null }
+}
+
+export interface PaperRequirements {
+  x402Version: number
+  scheme: string
+  network: string          // CAIP-2, e.g. "solana:EtWTR..."
+  amount: string           // base units, string per x402
+  asset: string            // mint
+  assetDecimals: number
+  payTo: string
+  maxTimeoutSeconds: number
+  extra: { memo: string; network?: string; rpcUrl?: string }
+  resource: string
+}
+
+export interface PaperQuote {
+  resource_key: string
+  verify_hash: string
+  requirements: PaperRequirements
+  already_paid: boolean
+}
+
+export interface PaymentRecord {
+  id: number | string
+  resource_key: string
+  verify_hash: string
+  expected_memo: string
+  expected_amount_base_units: number
+  expected_mint: string
+  expected_recipient: string
+  network: string
+  transaction_signature: string
+  payer_wallet: string
+  commitment: string
+  slot: number | null
+  block_time: number | null
+  status: string
+  created_at: string
+  verified_at?: string
+}
+
+export interface PaperOrderReceipt {
+  status: 'paper_order_created'
+  execution_mode: 'simulated'
+  order_id: string
+  created_at: string
+  asset_id: string
+  notional_usd: number
+  reference_price_usd: number
+  reference_price_source: string
+  reference_price_at: string
+  simulated_quantity: number
+  verify_hash: string
+  payment_transaction_signature: string
+  payment_slot: number | null
+  payment_block_time: number | null
+  payment_network: string
+  explorer_url: string | null
+  disclaimer: string
+}
+
+export interface PaperOrderResult {
+  status: 'paper_order_created'
+  resource_key: string
+  receipt: PaperOrderReceipt
+  payment: PaymentRecord
+}
+
+export interface AdvisorReport {
+  report_hash: string
+  generated_at: string
+  source: 'deepseek' | 'fallback'
+  model: string | null
+  candidates: AdvisorCandidate[]
+  overall_summary: string
+  limitations: string[]
+  market_snapshot:
+    | { provider: string; vs_currency?: string; fetched_at?: string; assets_considered: number }
+    | null
+  analysis_features: Record<string, unknown>
+  reason?: string
 }

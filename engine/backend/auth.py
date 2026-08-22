@@ -11,8 +11,12 @@ from dataclasses import dataclass
 
 from fastapi import Header, HTTPException
 
-MODE = (os.getenv('SOLFV_AUTH_MODE') or 'supabase').strip().lower()
 ENVIRONMENT = (os.getenv('SOLFV_ENVIRONMENT') or 'development').strip().lower()
+# Local showcases open directly into the product. Production defaults to the
+# Supabase gate unless an explicit authentication mode is configured.
+MODE = (os.getenv('SOLFV_AUTH_MODE') or (
+    'anonymous' if ENVIRONMENT != 'production' else 'supabase'
+)).strip().lower()
 SUPABASE_URL = (os.getenv('SUPABASE_URL') or os.getenv('VITE_SUPABASE_URL') or '').strip().rstrip('/')
 SUPABASE_KEY = (os.getenv('SUPABASE_ANON_KEY') or os.getenv('VITE_SUPABASE_ANON_KEY') or '').strip()
 TIMEOUT = int(os.getenv('SUPABASE_TIMEOUT', '10'))
@@ -27,7 +31,10 @@ class Principal:
 
 
 def status() -> dict:
-    return {'mode': MODE, 'configured': MODE == 'local' or bool(SUPABASE_URL and SUPABASE_KEY)}
+    return {
+        'mode': MODE,
+        'configured': MODE in {'anonymous', 'local'} or bool(SUPABASE_URL and SUPABASE_KEY),
+    }
 
 
 def _denied(message: str, status_code: int = 401) -> HTTPException:
@@ -62,6 +69,13 @@ def require_user(
     x_solfv_dev_user: str | None = Header(default=None),
 ) -> Principal:
     '''FastAPI dependency used by every user-facing engine endpoint.'''
+    if MODE in {'anonymous', 'none', 'disabled'}:
+        if ENVIRONMENT == 'production':
+            raise _denied('Anonymous authentication is disabled in production.', 503)
+        return Principal(
+            id=os.getenv('SOLFV_ANONYMOUS_USER_ID', 'demo-user'),
+            mode='anonymous',
+        )
     if MODE == 'local':
         if ENVIRONMENT == 'production':
             raise _denied('Local authentication is disabled in production.', 503)
