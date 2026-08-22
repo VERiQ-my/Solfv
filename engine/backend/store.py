@@ -1,0 +1,207 @@
+"""Supabase persistence — the audit history, and deliberately nothing more.
+
+SOLFV's privacy claim is architectural: documents are processed in memory and
+purged on a timer, so there is nothing to breach. Persisting the uploaded PDF,
+the rendered page images, or any detected personal data would falsify that
+claim, so this module cannot do it — there is no code path here that writes a
+document, an image, or a PII value.
+
+What it does write is the *reconciled result*: canonical financial figures from
+a published annual report, the check outcomes, and the derived ratios. That is
+public filing data plus our own arithmetic. It gives finance a record of what
+was analysed and what the engine concluded, which survives the session TTL.
+
+Every call fails soft. If Supabase is unreachable, misconfigured, or rejects a
+row, the analysis still returns — persistence is a convenience, never a
+dependency of the pipeline.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import urllib.error
+import urllib.request
+
+# Accept both the plain host and the REST endpoint, since either is a
+# reasonable thing to paste out of the Supabase dashboard.
+_RAW_URL = (os.getenv("SUPABASE_URL") or os.getenv("SUPABASE_API_URL") or "").strip()
+KEY = (os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_ANON_KEY") or "").strip()
+
+TABLE = os.getenv("SUPABASE_TABLE", "analyses")
+TIMEOUT = int(os.getenv("SUPABASE_TIMEOUT", "10"))
+
+
+def _rest_base(raw: str) -> str:
+    if not raw:
+        return ""
+    base = raw.rstrip("/")
+    if not base.endswith("/rest/v1"):
+        base += "/rest/v1"
+    return base
+
+
+REST = _rest_base(_RAW_URL)
+
+
+def configured() -> bool:
+    return bool(REST and KEY)
+
+
+def status() -> dict:
+    return {
+        "configured": configured(),
+        "url": REST or None,
+        "table": TABLE,
+        "stores": "reconciled analysis results only",
+        "never_stores": ["uploaded documents", "page images", "personal data"],
+    }
+
+
+def _request(method: str, path: str, body: object | None = None,
+             extra_headers: dict | None = None) -> tuple[int, object]:
+    headers = {
+        "apikey": KEY,
+        "Authorization": f"Bearer {KEY}",
+        "Content-Type": "application/json",
+        **(extra_headers or {}),
+    }
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    request = urllib.request.Request(
+        f"{REST}{path}", data=data, headers=headers, method=method,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+            raw = response.read().decode("utf-8") or "null"
+            return response.status, json.loads(raw)
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", "replace")[:500]
+        return error.code, detail
+    except Exception as error:  # noqa: BLE001 - DNS, TLS, timeout: all non-fatal
+        return 0, str(error)
+
+
+# ---------------------------------------------------------------------------
+# Writing
+# ---------------------------------------------------------------------------
+
+def _row(result: dict, record: dict, ledger: dict | None) -> dict:
+    """Flatten one analysis into the audit row.
+
+    Note what is absent: no file, no page image path, no ledger entries. The
+    ledger contributes two integers — how many entities were detected and how
+    many were transmitted — because the counts are the claim and the values are
+    the exposure.
+    """
+    summary = result.get("summary") or {}
+    trust = summary.get("trust") or {}
+    risk = result.get("risk") or {}
+    ledger = ledger or {}
+
+    return {
+        "session_id": record.get("session_id"),
+        "document_name": record.get("document"),
+        "source": record.get("source"),
+        "entity": result.get("entity"),
+        "period": result.get("period"),
+        "prior_period": result.get("prior_period"),
+        "ticker": result.get("ticker"),
+        "currency": result.get("currency"),
+        "unit": result.get("unit"),
+        "pages_total": record.get("pages_total"),
+
+        "checks_passed": summary.get("checks_passed"),
+        "checks_failed": summary.get("checks_failed"),
+        "checks_unverifiable": summary.get("checks_unverifiable"),
+        "line_item_count": summary.get("line_item_count"),
+        "trust_verified": trust.get("VERIFIED"),
+        "trust_derived": trust.get("DERIVED"),
+        "trust_unverified": trust.get("UNVERIFIED"),
+        "quarantined": result.get("quarantined") or [],
+
+        "risk_score": risk.get("score"),
+        "risk_zone": risk.get("zone"),
+        "risk_variant": risk.get("variant"),
+
+        "ratios": result.get("ratios") or {},
+        "prior_ratios": result.get("prior_ratios") or {},
+        "checks": result.get("checks") or [],
+        "line_items": result.get("line_items") or [],
+        "say_do_gap": result.get("say_do_gap") or [],
+        "benchmark": result.get("benchmark") or [],
+
+        # Counts only. The ledger never holds a raw match, and neither does this.
+        "pii_detected": ledger.get("detected"),
+        "pii_transmitted": ledger.get("transmitted"),
+        "pages_transmitted": ledger.get("pages_transmitted"),
+    }
+
+
+def save(result: dict, record: dict, ledger: dict | None = None) -> dict:
+    """Persist one reconciled analysis. Never raises."""
+    if not configured():
+        return {"saved": False, "reason": "Supabase is not configured."}
+
+    code, body = _request(
+        "POST", f"/{TABLE}", [_row(result, record, ledger)],
+        {"Prefer": "return=representation"},
+    )
+    if code in (200, 201):
+        row = body[0] if isinstance(body, list) and body else {}
+        return {"saved": True, "id": row.get("id"), "created_at": row.get("created_at")}
+    return {"saved": False, "reason": f"Supabase returned {code}: {body}"}
+
+
+# ---------------------------------------------------------------------------
+# Reading
+# ---------------------------------------------------------------------------
+
+_LIST_COLUMNS = (
+    "id,created_at,entity,period,ticker,document_name,source,pages_total,"
+    "checks_passed,checks_failed,checks_unverifiable,line_item_count,"
+    "trust_verified,trust_derived,trust_unverified,quarantined,"
+    "risk_score,risk_zone,risk_variant,ratios,pii_detected,pii_transmitted"
+)
+
+
+def history(limit: int = 50) -> dict:
+    """Recent analyses, newest first. Summary columns only — the heavy JSONB
+    payloads are fetched per row on demand."""
+    if not configured():
+        return {"available": False, "rows": [],
+                "reason": "Supabase is not configured."}
+
+    code, body = _request(
+        "GET",
+        f"/{TABLE}?select={_LIST_COLUMNS}&order=created_at.desc&limit={int(limit)}",
+    )
+    if code == 200 and isinstance(body, list):
+        return {"available": True, "rows": body}
+    return {"available": False, "rows": [],
+            "reason": f"Supabase returned {code}: {body}"}
+
+
+def get(row_id: str) -> dict | None:
+    if not configured():
+        return None
+    code, body = _request("GET", f"/{TABLE}?id=eq.{row_id}&select=*&limit=1")
+    if code == 200 and isinstance(body, list) and body:
+        return body[0]
+    return None
+
+
+def ping() -> dict:
+    """Cheap connectivity probe for /health — confirms the table is reachable."""
+    if not configured():
+        return {"ok": False, "reason": "Supabase is not configured."}
+    code, body = _request("GET", f"/{TABLE}?select=id&limit=1")
+    if code == 200:
+        return {"ok": True}
+    if code == 404:
+        return {"ok": False, "reason":
+                f"Table {TABLE!r} does not exist. Run engine/schema.sql."}
+    if code in (401, 403):
+        return {"ok": False, "reason":
+                "Supabase rejected the key. Check SUPABASE_ANON_KEY is the "
+                "full JWT, and that the table's RLS policies allow it."}
+    return {"ok": False, "reason": f"Supabase returned {code}: {body}"}
