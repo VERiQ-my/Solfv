@@ -26,11 +26,11 @@ export function useHistory(limit = 100) {
         if (delay) await new Promise(resolve => window.setTimeout(resolve, delay))
         try {
           const next = await api.history(limit)
-          if (next.available || attempt === RETRY_DELAYS_MS.length - 1) {
-            setResult(next)
+          if (next?.available || attempt === RETRY_DELAYS_MS.length - 1) {
+            setResult(next ?? { available: false, rows: [], reason: 'The engine returned an empty history response.' })
             return
           }
-          lastError = next.reason || 'The audit history is temporarily unavailable.'
+          lastError = next?.reason || 'The audit history is temporarily unavailable.'
         } catch (caught) {
           lastError = caught
         }
