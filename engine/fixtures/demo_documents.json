@@ -1,0 +1,69 @@
+{
+  "_note": "Spec 12.5 - verified page numbers for the demo documents, to be used as the hardcoded fallback in backend/pages.py. find_pages() does locate all four sections on Seacera, but it also returns notes-section noise, so ship this fallback and treat the matcher as the optimisation. All page numbers are 1-BASED PDF pages, matching fixtures/mock_extraction.json and the page images backend/ingest.py must render.",
+
+  "selected": "seacera",
+
+  "documents": {
+    "seacera": {
+      "file": "Seacera-Annual-Report-2024.pdf",
+      "entity": "Seacera Group Berhad",
+      "ticker": "7073.KL",
+      "stock_code": "7073",
+      "period": "FY2024",
+      "financial_year_end": "2024-06-30",
+      "pages_total": 179,
+      "currency": "MYR",
+      "unit": "units",
+      "unit_note": "Statements are printed in FULL RINGGIT, not RM'000. find_pages() must not require an RM'000 header to filter false positives on this document.",
+      "verified_pages": {
+        "income": [78, 79],
+        "balance_sheet": [80, 81],
+        "changes_in_equity": [82, 83],
+        "cashflow": [84, 85],
+        "narrative": [12, 13, 15, 16, 17, 18],
+        "financial_highlights": [19]
+      },
+      "extraction_pages": [78, 80, 81, 82, 85],
+      "narrative_pages": [12, 15, 17],
+      "rotated_pages": [82, 83],
+      "rotated_note": "The statement of changes in equity is printed sideways. pdfplumber returns those words with upright=false and the characters REVERSED ('081,617,63' for 36,716,180). backend/bbox.py must compare the reversed string too or retained_earnings resolves to a null bbox and goes UNVERIFIED.",
+      "market_data": {
+        "market_cap": 133760000,
+        "market_cap_prior": 111990000,
+        "source": "Financial Highlights, page 19 of the report itself",
+        "note": "Printed in the document, so the listed-company Altman variant needs no network call. share_price_1y is derived from the two market caps; share count is unchanged year on year (treasury shares constant at 180,945). Use THIS figure for the FY2024 Altman Z - it is contemporaneous with the statements.",
+        "since_the_report": {
+          "market_cap_live": 37311012,
+          "as_at": "2026-08-22",
+          "price_2y": "MYR 0.200 (2024-08-21) -> MYR 0.060 (2026-08-21), -70%",
+          "note": "Context only, NOT an input to the FY2024 Z-score. During FY2024 itself the market cap rose 19.4% (111.99m -> 133.76m), so the market agreed with management at the time. It is the two years since that repriced the company. Keep those two periods distinct if this comes up - conflating them would be the same sloppiness we are criticising."
+        }
+      },
+      "checklist_12_4": {
+        "text_layer": "PASS - 452,897 chars over 179 pages, native text",
+        "printed_current_subtotals": "PASS - 'Total current assets' p.80, 'Total current liabilities' p.81",
+        "equity_positive": "PASS - RM718,222,123",
+        "current_ratio_below_1_2": "MARGINAL FAIL - 1.29, and it improved from 1.17",
+        "real_mdna": "PASS - chairman's statement p.12 and MD&A pp.15-18",
+        "prior_year_comparatives": "PASS - printed alongside in every statement",
+        "ticker_resolves": "PASS - 7073.KL resolves as 'Seacera Group Berhad', Industrials / Building Products & Equipment, 4 years of statements available",
+        "find_pages_locates_all_four": "PASS - 4/4, 25 of 179 pages targeted"
+      }
+    },
+
+    "khee_san": {
+      "file": "Khee-San-Berhad-Annual-Report-2024.pdf",
+      "entity": "Khee San Berhad",
+      "period": "FY2024",
+      "financial_year_end": "2024-06-30",
+      "pages_total": 140,
+      "status": "REJECTED",
+      "rejection_reason": "Fails spec 12.4 check 3: total equity is NEGATIVE at -RM76,629,109 (accumulated losses of RM204.0m against RM112.2m share capital). Spec 12.3 warns this exact case - gearing and ROE blow up on a negative denominator and Altman X4 goes negative. The report also carries a qualified opinion, a material uncertainty on going concern and an unapproved Regularisation Plan, which is the FY T profile 12.3 says to avoid. Spec 12.4: 'Fails 1, 2 or 3 -> next candidate. Do not try to fix it.'",
+      "verified_pages": {
+        "balance_sheet": [60, 61],
+        "narrative": [15, 16, 17, 18]
+      },
+      "keep_as": "Contrast document only. Useful for showing the schema failing loudly on a company it was not designed for, if there is spare time - never as the primary demo."
+    }
+  }
+}

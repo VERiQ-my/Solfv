@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.local
+
+node_modules/
+dist/
+.vite/
+
+# Uploaded documents and rendered page images are session-scoped and purged
+# with the session (spec section 7). Never commit them.
+tmp/
+sessions/
+
+.DS_Store
+.idea/
+
+# Source annual reports - large binaries, not ours to redistribute.
+# Keep them locally; fixtures/ carries everything derived from them.
+*.pdf

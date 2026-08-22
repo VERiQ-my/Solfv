@@ -1,8 +1,20 @@
+# Environments / secrets
 .env
 .env.*
 !.env.example
+
+# Data / caches
 data/
 backend/.pytest_cache/
 backend/**/__pycache__/
+
+# Node / frontend build artifacts
+node_modules/
+dist/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# Next.js (payment gateway frontend)
 frontend/node_modules/
 frontend/.next/

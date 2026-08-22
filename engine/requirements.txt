@@ -1,0 +1,27 @@
+# Data lane (analysis/) needs NOTHING - it is pure stdlib by design, so the
+# reconciliation engine and the Say-Do Gap keep working even if everything
+# below fails to install.
+
+# Document handling (backend/ + scripts/)
+pdfplumber>=0.11        # text + word coordinates for find_pages and bbox lookup
+pymupdf>=1.24           # page -> PNG rendering for the source pane
+
+# API (backend/)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9  # multipart upload
+
+# Audit-history persistence. Used with the DATABASE_URL from .env; the
+# optional Supabase REST credentials remain supported as a fallback.
+psycopg[binary]>=3.2
+
+# XLSX ingestion path
+pandas>=2.2
+openpyxl>=3.1
+
+# Peer benchmark - run scripts/fetch_peers.py ONCE, commit the JSON.
+# The app reads the committed file; this is not needed at demo time.
+yfinance>=0.2
+
+# Tests
+pytest>=8.0

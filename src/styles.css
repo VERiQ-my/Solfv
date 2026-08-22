@@ -1,0 +1,393 @@
+/** Vanguard Intelligence — design tokens and component layer.
+ *
+ *  Every colour lives here once, as bare RGB channels behind a `--c-*` variable,
+ *  and `tailwind.config.js` maps the utility names onto them. The dark theme is
+ *  therefore a single block of reassignments rather than a `dark:` variant on
+ *  every element — which matters in a financial UI, where a token missed on one
+ *  screen reads as a rendering bug rather than a style choice.
+ *
+ *  The component classes below mirror the ones the design brief itself defines
+ *  (`.finance-card`, `.btn-primary`, `.security-badge`). They are the patterns
+ *  repeated on every screen; anything used once stays inline as utilities.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   Tokens — light (the brief's palette, verbatim)
+   --------------------------------------------------------------------------- */
+
+:root {
+  --c-background: 248 249 255;
+  --c-on-background: 11 28 48;
+
+  --c-surface: 248 249 255;
+  --c-surface-dim: 203 219 245;
+  --c-surface-bright: 248 249 255;
+  --c-surface-container-lowest: 255 255 255;
+  --c-surface-container-low: 239 244 255;
+  --c-surface-container: 229 238 255;
+  --c-surface-container-high: 220 233 255;
+  --c-surface-container-highest: 211 228 254;
+  --c-surface-variant: 211 228 254;
+  --c-surface-tint: 86 94 116;
+
+  --c-on-surface: 11 28 48;
+  --c-on-surface-variant: 69 70 77;
+  --c-inverse-surface: 33 49 69;
+  --c-inverse-on-surface: 234 241 255;
+
+  --c-outline: 118 119 125;
+  --c-outline-variant: 198 198 205;
+  /* The 1px card border the brief specifies (#E2E8F0) — softer than `outline`
+     so large data tables do not turn into a grid of hard lines. */
+  --c-hairline: 226 232 240;
+
+  --c-primary: 0 0 0;
+  --c-on-primary: 255 255 255;
+  --c-primary-container: 19 27 46;
+  --c-on-primary-container: 124 131 155;
+  --c-inverse-primary: 190 198 224;
+  --c-primary-fixed: 218 226 253;
+  --c-primary-fixed-dim: 190 198 224;
+  --c-on-primary-fixed: 19 27 46;
+  --c-on-primary-fixed-variant: 63 70 92;
+
+  --c-secondary: 0 81 213;
+  --c-on-secondary: 255 255 255;
+  --c-secondary-container: 49 107 243;
+  --c-on-secondary-container: 254 252 255;
+  --c-secondary-fixed: 219 225 255;
+  --c-secondary-fixed-dim: 180 197 255;
+  --c-on-secondary-fixed: 0 23 75;
+  --c-on-secondary-fixed-variant: 0 62 168;
+
+  --c-tertiary: 0 0 0;
+  --c-on-tertiary: 255 255 255;
+  --c-tertiary-container: 0 33 19;
+  --c-on-tertiary-container: 0 150 104;
+  --c-tertiary-fixed: 111 251 190;
+  --c-tertiary-fixed-dim: 78 222 163;
+  --c-on-tertiary-fixed: 0 33 19;
+  --c-on-tertiary-fixed-variant: 0 82 54;
+
+  --c-error: 186 26 26;
+  --c-on-error: 255 255 255;
+  --c-error-container: 255 218 214;
+  --c-on-error-container: 147 0 10;
+
+  /* Status roles. The brief names these in prose only, but a reconciliation UI
+     needs them to mean exactly one thing on every screen. */
+  --c-success: 16 185 129;
+  --c-on-success: 255 255 255;
+  --c-success-container: 209 250 229;
+  --c-warning: 180 83 9;
+  --c-on-warning: 255 255 255;
+  --c-warning-container: 254 243 199;
+  --c-danger: 220 38 38;
+  --c-on-danger: 255 255 255;
+  --c-danger-container: 254 226 226;
+
+  --shadow-raise: 0px 4px 12px rgb(15 23 42 / 0.05);
+  color-scheme: light;
+}
+
+/* ---------------------------------------------------------------------------
+   Tokens — dark
+   Derived from the same hues, re-anchored on the brief's Deep Navy so the
+   product reads as the same system with the lights off. `primary` inverts to
+   white because its role is "authoritative ink", not "the colour black".
+   --------------------------------------------------------------------------- */
+
+[data-theme='dark'] {
+  --c-background: 11 18 32;
+  --c-on-background: 230 237 248;
+
+  --c-surface: 11 18 32;
+  --c-surface-dim: 7 12 23;
+  --c-surface-bright: 26 36 54;
+  --c-surface-container-lowest: 17 24 39;
+  --c-surface-container-low: 22 31 49;
+  --c-surface-container: 27 37 57;
+  --c-surface-container-high: 33 44 66;
+  --c-surface-container-highest: 39 51 75;
+  --c-surface-variant: 39 51 75;
+  --c-surface-tint: 139 147 167;
+
+  --c-on-surface: 230 237 248;
+  --c-on-surface-variant: 154 165 184;
+  --c-inverse-surface: 230 237 248;
+  --c-inverse-on-surface: 11 18 32;
+
+  --c-outline: 107 118 136;
+  --c-outline-variant: 44 56 82;
+  --c-hairline: 36 48 74;
+
+  --c-primary: 255 255 255;
+  --c-on-primary: 11 18 32;
+  --c-primary-container: 27 37 57;
+  --c-on-primary-container: 154 165 184;
+  --c-inverse-primary: 19 27 46;
+  --c-primary-fixed: 27 37 57;
+  --c-primary-fixed-dim: 44 56 82;
+  --c-on-primary-fixed: 230 237 248;
+  --c-on-primary-fixed-variant: 182 192 210;
+
+  --c-secondary: 110 163 255;
+  --c-on-secondary: 5 21 43;
+  --c-secondary-container: 49 107 243;
+  --c-on-secondary-container: 255 255 255;
+  --c-secondary-fixed: 30 44 77;
+  --c-secondary-fixed-dim: 42 61 104;
+  --c-on-secondary-fixed: 219 225 255;
+  --c-on-secondary-fixed-variant: 180 197 255;
+
+  --c-tertiary: 255 255 255;
+  --c-on-tertiary: 11 18 32;
+  --c-tertiary-container: 0 48 28;
+  --c-on-tertiary-container: 78 222 163;
+  --c-tertiary-fixed: 111 251 190;
+  --c-tertiary-fixed-dim: 78 222 163;
+  --c-on-tertiary-fixed: 0 33 19;
+  --c-on-tertiary-fixed-variant: 111 251 190;
+
+  --c-error: 255 107 107;
+  --c-on-error: 43 0 0;
+  --c-error-container: 74 20 20;
+  --c-on-error-container: 255 218 214;
+
+  --c-success: 52 211 153;
+  --c-on-success: 5 46 29;
+  --c-success-container: 6 48 31;
+  --c-warning: 251 191 36;
+  --c-on-warning: 43 26 0;
+  --c-warning-container: 58 42 6;
+  --c-danger: 248 113 113;
+  --c-on-danger: 43 0 0;
+  --c-danger-container: 61 20 20;
+
+  --shadow-raise: 0px 4px 12px rgb(0 0 0 / 0.4);
+  color-scheme: dark;
+}
+
+/* ---------------------------------------------------------------------------
+   Base
+   --------------------------------------------------------------------------- */
+
+@layer base {
+  * {
+    @apply border-hairline;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-on-background font-sans text-body-md antialiased;
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  /* Numbers must align on the decimal wherever they appear — the brief's stated
+     reason for carrying a mono role at all. */
+  .mono,
+  .tabular {
+    @apply font-mono;
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1, h2, h3, h4, h5, h6 { @apply font-semibold text-primary; margin: 0; }
+  p { margin: 0; }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-secondary/40 ring-offset-2 ring-offset-background;
+  }
+
+  ::selection {
+    @apply bg-secondary/20;
+  }
+
+  /* Material Symbols, loaded in index.html. */
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    user-select: none;
+  }
+  .material-symbols-outlined.filled {
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+
+  /* Scrollbars, tuned to the surface ramp so long tables do not gain a bright
+     edge in dark mode. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--c-outline-variant)) transparent;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-outline-variant rounded-full;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-outline; background-clip: content-box; }
+}
+
+/* ---------------------------------------------------------------------------
+   Components
+   --------------------------------------------------------------------------- */
+
+@layer components {
+
+  /* --- Surfaces ---------------------------------------------------------- */
+
+  .card {
+    @apply bg-surface-container-lowest border border-hairline rounded-lg
+           transition-shadow duration-200;
+  }
+  .card-hover:hover { box-shadow: var(--shadow-raise); }
+
+  .card-header {
+    @apply flex items-center justify-between gap-md px-lg py-md border-b border-hairline;
+  }
+  .card-body { @apply p-lg; }
+  .card-title { @apply text-title-md text-primary; }
+
+  /* The inverted "spotlight" surface the brief uses for AI output. It stays
+     dark in both themes on purpose: it is the one place the eye should land
+     first, and a panel that flips to white in dark mode loses that job. */
+  .panel-spotlight {
+    @apply rounded-lg p-lg text-[rgb(234_241_255)];
+    background-color: rgb(11 22 40);
+    border: 1px solid rgb(255 255 255 / 0.08);
+  }
+  [data-theme='dark'] .panel-spotlight {
+    background-color: rgb(22 31 49);
+    border-color: rgb(255 255 255 / 0.1);
+  }
+  .panel-spotlight-inset {
+    @apply rounded-md p-md;
+    background-color: rgb(255 255 255 / 0.05);
+    border: 1px solid rgb(255 255 255 / 0.08);
+  }
+
+  /* --- Buttons ----------------------------------------------------------- */
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-sm rounded
+           px-md py-sm text-label-md whitespace-nowrap
+           transition-colors duration-200 disabled:opacity-40
+           disabled:cursor-not-allowed disabled:pointer-events-none;
+  }
+  .btn-primary { @apply btn bg-primary text-on-primary hover:bg-primary-container; }
+  [data-theme='dark'] .btn-primary { @apply hover:bg-primary-fixed-dim hover:text-on-primary-fixed; }
+
+  .btn-secondary {
+    @apply btn bg-surface-container-lowest text-primary border border-hairline
+           hover:bg-surface-container-low hover:border-outline-variant;
+  }
+  .btn-ghost { @apply btn text-secondary hover:bg-secondary/10; }
+  .btn-danger { @apply btn bg-danger text-on-danger hover:brightness-110; }
+  .btn-sm { @apply px-sm py-xs text-label-sm; }
+  .btn-full { @apply w-full; }
+
+  .icon-btn {
+    @apply inline-flex items-center justify-center h-9 w-9 rounded-full
+           text-on-surface-variant hover:text-secondary
+           hover:bg-surface-container-low transition-colors duration-200;
+  }
+
+  /* --- Badges & status --------------------------------------------------- */
+
+  /* Compliance markers. Square-ish and high contrast, so they never read as a
+     button the user is meant to press. */
+  .badge {
+    @apply inline-flex items-center gap-xs rounded-sm px-sm py-xs
+           text-label-sm uppercase bg-primary text-on-primary;
+  }
+  .badge-neutral { @apply badge bg-surface-variant text-on-surface; }
+  .badge-success { @apply badge bg-success text-on-success; }
+  .badge-warning { @apply badge bg-warning text-on-warning; }
+  .badge-danger  { @apply badge bg-danger text-on-danger; }
+  .badge-info    { @apply badge bg-secondary text-on-secondary; }
+
+  /* Data indicators are pills — the brief's rule for telling them apart from
+     interactive controls. */
+  .chip {
+    @apply inline-flex items-center gap-xs rounded-full px-sm py-xs
+           text-label-sm uppercase bg-surface-container-high text-on-surface-variant;
+  }
+  .chip-success { @apply chip bg-success/10 text-on-tertiary-container; }
+  .chip-warning { @apply chip bg-warning/15 text-warning; }
+  .chip-danger  { @apply chip bg-danger/10 text-danger; }
+  .chip-info    { @apply chip bg-secondary/10 text-secondary; }
+
+  .dot { @apply inline-block h-2 w-2 rounded-full shrink-0; }
+
+  /* --- Forms ------------------------------------------------------------- */
+
+  .field-label { @apply block text-body-sm text-on-surface-variant mb-xs; }
+
+  .input {
+    @apply w-full rounded border border-outline-variant bg-surface-container-lowest
+           px-md py-sm text-body-md text-on-surface
+           placeholder:text-on-surface-variant/60
+           focus:border-secondary focus:ring-2 focus:ring-secondary/10
+           focus:outline-none transition-colors duration-200;
+  }
+
+  /* --- Tables ------------------------------------------------------------ */
+
+  .data-table { @apply w-full text-left border-collapse; }
+  .data-table thead tr { @apply bg-surface-container-low border-b border-hairline; }
+  .data-table th {
+    @apply px-md py-sm text-label-md uppercase text-on-surface-variant font-semibold;
+  }
+  .data-table td { @apply px-md py-sm text-body-md text-on-surface align-middle; }
+  .data-table tbody tr { @apply border-b border-hairline last:border-0; }
+  .data-table tbody tr.row-hover:hover { @apply bg-surface-container-low/60; }
+
+  /* --- Navigation -------------------------------------------------------- */
+
+  .nav-item {
+    @apply relative flex w-full items-center gap-md rounded-md px-md py-sm
+           text-body-md font-medium text-on-surface-variant text-left
+           hover:bg-surface-container-low hover:text-primary
+           transition-colors duration-200;
+  }
+  .nav-item-active {
+    @apply bg-surface-container-low text-secondary font-bold
+           rounded-r-none border-r-2 border-secondary hover:text-secondary;
+  }
+  .nav-item-disabled {
+    @apply opacity-40 cursor-not-allowed hover:bg-transparent hover:text-on-surface-variant;
+  }
+
+  /* --- Feedback ---------------------------------------------------------- */
+
+  .spinner {
+    @apply inline-block h-4 w-4 shrink-0 rounded-full border-2 border-current
+           border-r-transparent animate-spin;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded bg-surface-container-high;
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 animate-shimmer;
+    background: linear-gradient(90deg, transparent, rgb(var(--c-surface-container-lowest) / 0.6), transparent);
+  }
+
+  /* Masked PII. The brief mandates six dots at a muted weight — never the real
+     value behind a blur that a screenshot could recover. */
+  .masked {
+    @apply font-mono text-on-surface-variant/70 tracking-widest select-none;
+  }
+
+  .eyebrow { @apply text-label-md uppercase text-on-surface-variant; }
+
+  .hairline { @apply border-hairline; }
+}
