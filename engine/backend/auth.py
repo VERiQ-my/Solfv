@@ -14,9 +14,10 @@ from fastapi import Header, HTTPException
 
 ENVIRONMENT = (os.getenv('SOLFV_ENVIRONMENT') or 'development').strip().lower()
 # Local showcases open directly into the product. Production defaults to the
-# Supabase gate unless an explicit authentication mode is configured.
+# same private guest-session gate as the Vite frontend unless an explicit
+# authentication mode is configured.
 MODE = (os.getenv('SOLFV_AUTH_MODE') or (
-    'anonymous' if ENVIRONMENT != 'production' else 'supabase'
+    'anonymous' if ENVIRONMENT != 'production' else 'guest'
 )).strip().lower()
 SUPABASE_URL = (os.getenv('SUPABASE_URL') or os.getenv('VITE_SUPABASE_URL') or '').strip().rstrip('/')
 SUPABASE_KEY = (os.getenv('SUPABASE_ANON_KEY') or os.getenv('VITE_SUPABASE_ANON_KEY') or '').strip()

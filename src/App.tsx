@@ -24,7 +24,7 @@ import SignUp from './pages/SignUp'
 import { Logo } from './components/Logo'
 import { Icon } from './components/ui'
 import { countdown } from './lib/format'
-import { AUTH_CONFIGURATION_ERROR, AuthProvider, useAuth } from './lib/auth'
+import { AUTH_CONFIGURATION_ERROR, AUTH_MODE, AuthProvider, useAuth } from './lib/auth'
 import type { AuthUser } from './lib/auth'
 import { NavProvider, SECTIONS, useNav } from './nav'
 import { SessionProvider, useSession } from './state'
@@ -112,7 +112,7 @@ function Root() {
     // Guest mode creates a user during restoration. A missing user there is a
     // configuration/runtime failure; local and Supabase modes still expose
     // their sign-in screens.
-    if (error && import.meta.env.VITE_AUTH_MODE === 'guest') {
+    if (error && AUTH_MODE === 'guest') {
       return (
         <div className="min-h-screen grid place-content-center p-lg bg-background">
           <div className="max-w-xl card p-xl space-y-md">

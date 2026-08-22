@@ -59,18 +59,21 @@ const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim()
 const LOCAL_REQUESTED = import.meta.env.VITE_AUTH_MODE === 'local'
 const GUEST_REQUESTED = import.meta.env.VITE_AUTH_MODE === 'guest'
+const SUPABASE_CONFIGURED = Boolean(SUPABASE_URL && SUPABASE_KEY)
 
 export const AUTH_MODE: AuthMode =
-  GUEST_REQUESTED ? 'guest' : SUPABASE_URL && SUPABASE_KEY ? 'supabase' : 'local'
+  LOCAL_REQUESTED
+    ? 'local'
+    : GUEST_REQUESTED || (!SUPABASE_CONFIGURED && import.meta.env.PROD)
+      ? 'guest'
+      : SUPABASE_CONFIGURED
+        ? 'supabase'
+        : 'local'
 
 export const AUTH_CONFIGURATION_ERROR =
-  GUEST_REQUESTED
-    ? null
-    : Boolean(SUPABASE_URL) !== Boolean(SUPABASE_KEY)
+  Boolean(SUPABASE_URL) !== Boolean(SUPABASE_KEY)
     ? 'Set both VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, or remove both.'
-    : !SUPABASE_URL && !LOCAL_REQUESTED
-      ? 'Authentication is not configured. Set Supabase credentials, or VITE_AUTH_MODE=local for development.'
-      : null
+    : null
 
 let apiToken: string | null = null
 let localUserId: string | null = null
