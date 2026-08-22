@@ -17,6 +17,7 @@ import pathlib
 import shutil
 import time
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -25,12 +26,19 @@ from pydantic import BaseModel
 from analysis.pipeline import analyse
 from analysis.query import resolve_query
 
+# The advisor and market modules read their settings at import time.
+_ENV_ROOT = pathlib.Path(__file__).resolve().parents[1].parent
+load_dotenv(_ENV_ROOT / '.env', override=False)
+
 from . import (advisor, auth, crypto, extract, ingest, market, paper_order,
                 payment, privacy, session, store)
 from .bbox import resolve_bboxes
 from .pages import resolve_pages
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+# Load the repository-root .env when the engine is started from any directory.
+# Environment variables already supplied by the shell remain authoritative.
+load_dotenv(ROOT.parent / '.env', override=False)
 
 # Printed on p.19 of the demo document's financial highlights. Used only as the
 # fallback for the fixture path — a live feed supersedes it when one is
