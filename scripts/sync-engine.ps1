@@ -82,10 +82,20 @@ $supabaseUrl = Get-SupabaseUrl
 docker rm --force solfv-engine 2>$null | Out-Null
 docker run --detach --name solfv-engine --restart unless-stopped --network solfv-network --publish 127.0.0.1:8000:8000 --label "solfv.engine.tree=$targetEngineTree" --env-file $envFile --env "SUPABASE_URL=$supabaseUrl" --env SOLFV_AUTH_MODE=guest --env SOLFV_ENVIRONMENT=production --env SOLFV_CORS_ORIGINS=https://solfv.veriq.my solfv-engine-local:current | Out-Null
 
-Start-Sleep -Seconds 3
+$health = $null
+$healthError = $null
 try {
-  $health = (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/health).Content | ConvertFrom-Json
-  if (-not $health.ok) { throw 'The replacement engine did not report healthy.' }
+  for ($attempt = 1; $attempt -le 10; $attempt++) {
+    try {
+      $health = (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/health -TimeoutSec 5).Content | ConvertFrom-Json
+      if ($health.ok) { break }
+      $healthError = 'The replacement engine did not report healthy.'
+    } catch {
+      $healthError = $_
+    }
+    Start-Sleep -Seconds 1
+  }
+  if (-not $health -or -not $health.ok) { throw $healthError }
 } catch {
   docker rm --force solfv-engine 2>$null | Out-Null
   docker image inspect solfv-engine-local:previous *> $null
