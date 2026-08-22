@@ -10,6 +10,7 @@ pymupdf>=1.24           # page -> PNG rendering for the source pane
 fastapi>=0.115
 uvicorn[standard]>=0.30
 python-multipart>=0.0.9  # multipart upload
+python-dotenv>=1.0
 
 # Audit-history persistence. Used with the DATABASE_URL from .env; the
 # optional Supabase REST credentials remain supported as a fallback.
