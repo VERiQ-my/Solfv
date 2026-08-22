@@ -1,0 +1,542 @@
+{
+  "_note": "Hand-typed from Seacera-Annual-Report-2024.pdf (Group column, FYE 30 June 2024) per spec 12.5. Values and page numbers are transcribed from the printed statements; bboxes are resolved by scripts/build_fixture.py using the same reverse lookup as backend/bbox.py. Pages are 1-based PDF pages.",
+  "source_pdf": "Seacera-Annual-Report-2024.pdf",
+  "entity": "Seacera Group Berhad",
+  "period": "FY2024",
+  "currency": "MYR",
+  "unit": "units",
+  "ticker": "7073.KL",
+  "line_items": [
+    {
+      "canonical_key": "total_assets",
+      "label_as_printed": "TOTAL ASSETS",
+      "value": 853283605,
+      "page": 80,
+      "bbox": [
+        235.94,
+        444.41,
+        285.65,
+        454.31
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "total_equity",
+      "label_as_printed": "TOTAL EQUITY",
+      "value": 718222123,
+      "page": 80,
+      "bbox": [
+        236.04,
+        570.33,
+        285.65,
+        580.23
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "current_assets",
+      "label_as_printed": "Total current assets",
+      "value": 52184207,
+      "page": 80,
+      "bbox": [
+        241.09,
+        431.81,
+        285.75,
+        441.72
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "cash",
+      "label_as_printed": "Cash and bank balances",
+      "value": 3686840,
+      "page": 80,
+      "bbox": [
+        246.05,
+        394.03,
+        285.76,
+        403.94
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "receivables",
+      "label_as_printed": "Trade and other receivables",
+      "value": 44913766,
+      "page": 80,
+      "bbox": [
+        241.09,
+        368.85,
+        285.75,
+        378.75
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "inventory",
+      "label_as_printed": "Inventories",
+      "value": 1198215,
+      "page": 80,
+      "bbox": [
+        246.05,
+        356.25,
+        285.76,
+        366.16
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "total_liabilities",
+      "label_as_printed": "Total liabilities",
+      "value": 135061482,
+      "page": 81,
+      "bbox": [
+        236.72,
+        344.37,
+        286.43,
+        354.28
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "current_liabilities",
+      "label_as_printed": "Total current liabilities",
+      "value": 40323034,
+      "page": 81,
+      "bbox": [
+        241.69,
+        331.78,
+        286.45,
+        341.68
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "st_debt",
+      "label_as_printed": "Lease liabilities (current)",
+      "value": 39768,
+      "page": 81,
+      "bbox": [
+        259.23,
+        319.18,
+        286.56,
+        329.09
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "lt_debt",
+      "label_as_printed": "Lease liabilities (non-current)",
+      "value": 23732,
+      "page": 81,
+      "bbox": [
+        259.23,
+        193.26,
+        286.56,
+        203.16
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "retained_earnings",
+      "label_as_printed": "Retained earnings",
+      "value": 36716180,
+      "page": 82,
+      "bbox": [
+        311.53,
+        280.71,
+        322.03,
+        327.97
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "revenue",
+      "label_as_printed": "Revenue",
+      "value": 52796163,
+      "page": 78,
+      "bbox": [
+        254.19,
+        194.5,
+        299.9,
+        204.66
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "cogs",
+      "label_as_printed": "Cost of sales",
+      "value": 46323659,
+      "page": 78,
+      "bbox": [
+        249.88,
+        220.2,
+        302.42,
+        230.36
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "gross_profit",
+      "label_as_printed": "Gross profit",
+      "value": 6472504,
+      "page": 78,
+      "bbox": [
+        259.24,
+        245.9,
+        299.87,
+        256.05
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "opex",
+      "label_as_printed": "Administrative expenses",
+      "value": 3206335,
+      "page": 78,
+      "bbox": [
+        254.97,
+        400.08,
+        302.43,
+        410.23
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "ebit",
+      "label_as_printed": "Operating profit",
+      "value": 3660462,
+      "page": 78,
+      "bbox": [
+        258.3,
+        425.77,
+        299.03,
+        435.93
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "interest_expense",
+      "label_as_printed": "Finance costs",
+      "value": 102099,
+      "page": 78,
+      "bbox": [
+        262.61,
+        451.47,
+        302.46,
+        461.63
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "pat",
+      "label_as_printed": "Profit for the year",
+      "value": 3546948,
+      "page": 78,
+      "bbox": [
+        258.38,
+        528.56,
+        299.01,
+        538.72
+      ],
+      "trust": "UNVERIFIED"
+    },
+    {
+      "canonical_key": "operating_cf",
+      "label_as_printed": "Net cash generated from operating activities",
+      "value": 2113126,
+      "page": 85,
+      "bbox": [
+        258.57,
+        284.11,
+        299.2,
+        294.26
+      ],
+      "trust": "UNVERIFIED"
+    }
+  ],
+  "prior_period": {
+    "period": "FY2023",
+    "line_items": [
+      {
+        "canonical_key": "total_assets",
+        "label_as_printed": "TOTAL ASSETS",
+        "value": 849215039,
+        "page": 80,
+        "bbox": [
+          309.53,
+          444.07,
+          359.14,
+          453.97
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "total_equity",
+        "label_as_printed": "TOTAL EQUITY",
+        "value": 715168627,
+        "page": 80,
+        "bbox": [
+          309.53,
+          570.0,
+          359.14,
+          579.9
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "current_assets",
+        "label_as_printed": "Total current assets",
+        "value": 45615474,
+        "page": 80,
+        "bbox": [
+          314.48,
+          406.29,
+          359.14,
+          416.19
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "cash",
+        "label_as_printed": "Cash and bank balances",
+        "value": 2048239,
+        "page": 80,
+        "bbox": [
+          319.45,
+          393.7,
+          359.16,
+          403.6
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "receivables",
+        "label_as_printed": "Trade and other receivables",
+        "value": 40559773,
+        "page": 80,
+        "bbox": [
+          314.49,
+          368.51,
+          359.15,
+          378.41
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "inventory",
+        "label_as_printed": "Inventories",
+        "value": 2044341,
+        "page": 80,
+        "bbox": [
+          319.45,
+          355.92,
+          359.16,
+          365.82
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "total_liabilities",
+        "label_as_printed": "Total liabilities",
+        "value": 134046412,
+        "page": 81,
+        "bbox": [
+          310.21,
+          344.04,
+          359.83,
+          353.94
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "current_liabilities",
+        "label_as_printed": "Total current liabilities",
+        "value": 39131698,
+        "page": 81,
+        "bbox": [
+          315.2,
+          331.44,
+          359.86,
+          341.34
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "st_debt",
+        "label_as_printed": "Lease liabilities (current)",
+        "value": 770552,
+        "page": 81,
+        "bbox": [
+          327.66,
+          318.85,
+          359.94,
+          328.75
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "lt_debt",
+        "label_as_printed": "Lease liabilities (non-current)",
+        "value": 530602,
+        "page": 81,
+        "bbox": [
+          327.66,
+          192.92,
+          359.94,
+          202.82
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "retained_earnings",
+        "label_as_printed": "Retained earnings",
+        "value": 4421406,
+        "page": 82,
+        "bbox": [
+          230.95,
+          280.69,
+          241.45,
+          322.7
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "revenue",
+        "label_as_printed": "Revenue",
+        "value": 52059182,
+        "page": 78,
+        "bbox": [
+          324.15,
+          194.03,
+          369.86,
+          204.19
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "cogs",
+        "label_as_printed": "Cost of sales",
+        "value": 42874040,
+        "page": 78,
+        "bbox": [
+          319.84,
+          219.73,
+          372.38,
+          229.89
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "gross_profit",
+        "label_as_printed": "Gross profit",
+        "value": 9185142,
+        "page": 78,
+        "bbox": [
+          329.25,
+          245.43,
+          369.88,
+          255.59
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "opex",
+        "label_as_printed": "Administrative expenses",
+        "value": 5631214,
+        "page": 78,
+        "bbox": [
+          324.93,
+          399.61,
+          372.39,
+          409.77
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "ebit",
+        "label_as_printed": "Operating profit",
+        "value": 7615550,
+        "page": 78,
+        "bbox": [
+          328.37,
+          425.31,
+          369.0,
+          435.46
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "interest_expense",
+        "label_as_printed": "Finance costs",
+        "value": 97080,
+        "page": 78,
+        "bbox": [
+          337.66,
+          451.0,
+          372.43,
+          461.16
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "pat",
+        "label_as_printed": "Profit for the year",
+        "value": 7563664,
+        "page": 78,
+        "bbox": [
+          328.4,
+          528.1,
+          369.03,
+          538.25
+        ],
+        "trust": "UNVERIFIED"
+      },
+      {
+        "canonical_key": "operating_cf",
+        "label_as_printed": "Net cash generated from operating activities",
+        "value": 1820519,
+        "page": 85,
+        "bbox": [
+          328.63,
+          283.64,
+          369.25,
+          293.8
+        ],
+        "trust": "UNVERIFIED"
+      }
+    ]
+  },
+  "narrative_claims": [
+    {
+      "sentence": "The Group succeeded in generating strong momentum to achieve another year of positive earnings towards a more sustainable performance.",
+      "page": 12,
+      "metric": "net_margin",
+      "direction": "improving"
+    },
+    {
+      "sentence": "Seacera Group Berhad (“Seacera” or “the Company”) and its subsidiaries (“the Group”) continued to deliver a profitable performance for the financial year ended (“FYE”) 30 June 2024.",
+      "page": 15,
+      "metric": "roe",
+      "direction": "stable"
+    },
+    {
+      "sentence": "As at 30 June 2024, the financial position of the Group remained strong with an improved shareholders’ equity from RM715.17 million in the previous year to RM718.22 million.",
+      "page": 12,
+      "metric": "gearing",
+      "direction": "strong"
+    },
+    {
+      "sentence": "Current ratio of the Group improved from 1.17 to 1.29 for the FYE 30 June 2024.",
+      "page": 17,
+      "metric": "current_ratio",
+      "direction": "improving"
+    },
+    {
+      "sentence": "This upturn was attributed to Seacera’s cash management strategies and consistent commitment in maintaining a robust liquidity position.",
+      "page": 17,
+      "metric": "current_ratio",
+      "direction": "strong"
+    }
+  ]
+}

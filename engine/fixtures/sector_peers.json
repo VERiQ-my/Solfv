@@ -1,0 +1,134 @@
+{
+  "_note": "Real market data pulled once by scripts/fetch_peers.py and committed. The app reads this file; live yfinance calls are a fallback only. Each ratio uses the peer's most recent reported financial year, so year-ends are not aligned across peers - normal for a sector median. Size dispersion is wide (RM17m to RM9bn market cap); we compare ratios rather than absolutes. Medians are used rather than means precisely because some peers are loss-making outliers.",
+  "synthetic": false,
+  "sector": "Building materials (Bursa Malaysia)",
+  "exchange": "Bursa Malaysia",
+  "source": "yfinance",
+  "fetched_at": "2026-08-22",
+  "tickers": [
+    "5371.KL",
+    "5009.KL",
+    "5048.KL",
+    "5273.KL",
+    "3794.KL",
+    "5000.KL",
+    "2852.KL"
+  ],
+  "peers": [
+    {
+      "ticker": "5371.KL",
+      "name": "Kim Hin Industry Berhad",
+      "industry": "Building Materials"
+    },
+    {
+      "ticker": "5009.KL",
+      "name": "White Horse Berhad",
+      "industry": "Building Materials"
+    },
+    {
+      "ticker": "5048.KL",
+      "name": "YB Ventures Berhad",
+      "industry": "Building Materials"
+    },
+    {
+      "ticker": "5273.KL",
+      "name": "Chin Hin Group Berhad",
+      "industry": "Building Materials"
+    },
+    {
+      "ticker": "3794.KL",
+      "name": "Malayan Cement Berhad",
+      "industry": "Building Materials"
+    },
+    {
+      "ticker": "5000.KL",
+      "name": "Hume Cement Industries Berhad",
+      "industry": "Building Materials"
+    },
+    {
+      "ticker": "2852.KL",
+      "name": "Cahya Mata Sarawak Berhad",
+      "industry": "Building Materials"
+    }
+  ],
+  "metrics": {
+    "current_ratio": {
+      "median": 2.0768,
+      "n": 7,
+      "values": [
+        1.4603,
+        1.6603,
+        1.8362,
+        2.0768,
+        2.6013,
+        3.9553,
+        4.0619
+      ]
+    },
+    "gearing": {
+      "median": 0.099,
+      "n": 7,
+      "values": [
+        0.0,
+        0.0467,
+        0.067,
+        0.099,
+        0.1119,
+        0.3224,
+        1.431
+      ]
+    },
+    "interest_cover": {
+      "median": 4.1903,
+      "n": 7,
+      "values": [
+        -44.6429,
+        -9.3901,
+        -0.3292,
+        4.1903,
+        5.5886,
+        12.3118,
+        141.0715
+      ]
+    },
+    "gross_margin": {
+      "median": 0.279,
+      "n": 7,
+      "values": [
+        -0.2268,
+        0.1713,
+        0.183,
+        0.279,
+        0.3214,
+        0.4251,
+        0.4723
+      ]
+    },
+    "net_margin": {
+      "median": 0.0263,
+      "n": 7,
+      "values": [
+        -1.0077,
+        -0.0985,
+        -0.0193,
+        0.0263,
+        0.0592,
+        0.1808,
+        0.4077
+      ]
+    },
+    "roe": {
+      "median": 0.0193,
+      "n": 7,
+      "values": [
+        -0.3142,
+        -0.1061,
+        -0.0133,
+        0.0193,
+        0.1048,
+        0.1193,
+        0.4023
+      ]
+    }
+  }
+}
