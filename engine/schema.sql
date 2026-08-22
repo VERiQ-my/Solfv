@@ -63,6 +63,13 @@ create index if not exists analyses_entity_idx     on public.analyses (entity);
 create index if not exists analyses_failed_idx     on public.analyses (checks_failed)
   where checks_failed > 0;
 
+-- Ownership is assigned by the authenticated engine, never by the browser.
+-- Existing prototype rows remain unowned and are intentionally not returned to
+-- any account.
+alter table public.analyses add column if not exists owner_id text;
+create index if not exists analyses_owner_created_at_idx
+  on public.analyses (owner_id, created_at desc);
+
 -- Row Level Security ---------------------------------------------------------
 --
 -- RLS is enabled and the policies below are permissive for the anon key, which
@@ -74,16 +81,18 @@ alter table public.analyses enable row level security;
 
 drop policy if exists "anon can read analyses"   on public.analyses;
 drop policy if exists "anon can insert analyses" on public.analyses;
+drop policy if exists "owners can read analyses" on public.analyses;
+drop policy if exists "owners can insert analyses" on public.analyses;
 
-create policy "anon can read analyses"
+create policy "owners can read analyses"
   on public.analyses for select
-  to anon, authenticated
-  using (true);
+  to authenticated
+  using (owner_id = auth.uid()::text);
 
-create policy "anon can insert analyses"
+create policy "owners can insert analyses"
   on public.analyses for insert
-  to anon, authenticated
-  with check (true);
+  to authenticated
+  with check (owner_id = auth.uid()::text);
 
 -- Deliberately no update or delete policy: an audit history that callers can
 -- rewrite is not an audit history.

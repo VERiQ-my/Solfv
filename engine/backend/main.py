@@ -17,7 +17,7 @@ import pathlib
 import shutil
 import time
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from analysis.pipeline import analyse
 from analysis.query import resolve_query
 
-from . import extract, ingest, market, payment, privacy, session, store
+from . import auth, extract, ingest, market, payment, privacy, session, store
 from .bbox import resolve_bboxes
 from .pages import resolve_pages
 
@@ -39,11 +39,30 @@ DEMO_MARKET = {"market_cap": 133_760_000, "share_price_1y": 0.1944}
 app = FastAPI(title="SOLFV", version="1.0",
               description="LLM extracts, deterministic math verifies.")
 
+_cors_origins = [origin.strip() for origin in os.getenv(
+    "SOLFV_CORS_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173",
+).split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], allow_credentials=False,
-    allow_methods=["*"], allow_headers=["*"],
+    allow_origins=_cors_origins, allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "X-Solfv-Dev-User"],
 )
+
+
+@app.middleware("http")
+async def authenticated_api(request: Request, call_next):
+    """Require an authenticated principal before any user-facing endpoint."""
+    if request.method == "OPTIONS" or request.url.path == "/health":
+        return await call_next(request)
+    try:
+        request.state.user = auth.require_user(
+            request.headers.get("authorization"), request.headers.get("x-solfv-dev-user"),
+        )
+    except HTTPException as error:
+        return JSONResponse({"detail": error.detail}, status_code=error.status_code)
+    return await call_next(request)
 
 PEERS = extract.load_peers()
 DEMO_DOCS = extract.load_demo_documents()
@@ -75,9 +94,9 @@ def _envelope(record: dict) -> dict:
     }
 
 
-def _require(sid: str) -> dict:
+def _require(sid: str, owner_id: str) -> dict:
     record = session.get(sid)
-    if record is None:
+    if record is None or record.get("owner_id") != owner_id:
         raise HTTPException(
             status_code=404,
             detail="Session not found. It expired and was purged, or never existed.",
@@ -133,7 +152,9 @@ def _run(record: dict, extraction: dict, market_data: dict | None) -> dict:
                    market=market_data)
 
     if store.configured():
-        outcome = store.save(result, record, record.get("privacy_ledger"))
+        outcome = store.save(
+            result, record, record.get("privacy_ledger"), record.get("owner_id") or "",
+        )
         if outcome.get("saved"):
             session.update(record["session_id"], audit_id=outcome.get("id"))
         else:
@@ -148,7 +169,7 @@ def _run(record: dict, extraction: dict, market_data: dict | None) -> dict:
 # ---------------------------------------------------------------------------
 
 @app.post("/upload")
-async def upload(file: UploadFile = File(...)) -> JSONResponse:
+async def upload(request: Request, file: UploadFile = File(...)) -> JSONResponse:
     """Ingest one document. PDFs go through page targeting, privacy masking and
     the vision model; spreadsheets skip straight to Contract 1."""
     name = pathlib.Path(file.filename or "upload").name
@@ -156,7 +177,7 @@ async def upload(file: UploadFile = File(...)) -> JSONResponse:
     if suffix not in (".pdf", ".xlsx", ".xls"):
         raise HTTPException(400, "Upload a native-text PDF or an XLSX spreadsheet.")
 
-    record = session.new_session(document=name, source="upload")
+    record = session.new_session(document=name, source="upload", owner_id=request.state.user.id)
     target = pathlib.Path(record["dir"]) / name
     with target.open("wb") as handle:
         shutil.copyfileobj(file.file, handle)
@@ -267,7 +288,7 @@ def _ingest_xlsx(record: dict, path: pathlib.Path) -> dict:
 # ---------------------------------------------------------------------------
 
 @app.post("/demo/{variant}")
-def demo(variant: str = "clean") -> JSONResponse:
+def demo(request: Request, variant: str = "clean") -> JSONResponse:
     """Load a hand-verified extraction without a PDF.
 
     `clean` gives 2 PASS / 1 UNVERIFIABLE and 19/19 VERIFIED. `doctored` is the
@@ -283,6 +304,7 @@ def demo(variant: str = "clean") -> JSONResponse:
     record = session.new_session(
         document=document.get("file") or f"{variant} fixture",
         source=f"demo:{variant}",
+        owner_id=request.state.user.id,
         pages_total=document.get("pages_total"),
         targeted_pages={
             "extraction": document.get("extraction_pages") or [],
@@ -335,8 +357,8 @@ def _demo_ledger(document: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 @app.get("/analysis/{sid}")
-def analysis(sid: str) -> JSONResponse:
-    record = _require(sid)
+def analysis(sid: str, request: Request) -> JSONResponse:
+    record = _require(sid, request.state.user.id)
     blocked = payment.gate(record)
     if blocked:
         return JSONResponse(blocked, status_code=402)
@@ -352,9 +374,9 @@ def analysis(sid: str) -> JSONResponse:
 # ---------------------------------------------------------------------------
 
 @app.get("/page/{sid}/{number}")
-def page(sid: str, number: int):
+def page(sid: str, number: int, request: Request):
     """The rendered source page. 1-BASED, like every page number in the system."""
-    record = _require(sid)
+    record = _require(sid, request.state.user.id)
     path = (record.get("page_images") or {}).get(str(number))
     if not path or not pathlib.Path(path).is_file():
         raise HTTPException(
@@ -374,10 +396,10 @@ class Question(BaseModel):
 
 
 @app.post("/query/{sid}")
-def query(sid: str, body: Question) -> JSONResponse:
+def query(sid: str, body: Question, request: Request) -> JSONResponse:
     """Retrieval, not generation. The refusal is guaranteed by the data
     structure: `key not in ratios` is a fact, not a judgement call."""
-    record = _require(sid)
+    record = _require(sid, request.state.user.id)
     blocked = payment.gate(record)
     if blocked:
         return JSONResponse(blocked, status_code=402)
@@ -424,8 +446,8 @@ def payment_network() -> dict:
 
 
 @app.post("/payment/{sid}")
-def settle(sid: str, body: Settlement) -> JSONResponse:
-    record = _require(sid)
+def settle(sid: str, body: Settlement, request: Request) -> JSONResponse:
+    record = _require(sid, request.state.user.id)
     result = payment.verify(body.signature)
     if result.get("paid"):
         session.update(sid, paid=True, payment=result)
@@ -437,15 +459,16 @@ def settle(sid: str, body: Settlement) -> JSONResponse:
 # ---------------------------------------------------------------------------
 
 @app.delete("/session/{sid}")
-def purge(sid: str) -> dict:
+def purge(sid: str, request: Request) -> dict:
     """Destroy the record and its files. The countdown in the UI is the same
     clock; this is the manual version of it reaching zero."""
+    _require(sid, request.state.user.id)
     return {"purged": session.purge(sid), "session_id": sid}
 
 
 @app.get("/session/{sid}")
-def describe(sid: str) -> dict:
-    return _envelope(_require(sid))
+def describe(sid: str, request: Request) -> dict:
+    return _envelope(_require(sid, request.state.user.id))
 
 
 # ---------------------------------------------------------------------------
@@ -493,18 +516,18 @@ def market_timeseries(
 # ---------------------------------------------------------------------------
 
 @app.get("/history")
-def history(limit: int = 50) -> JSONResponse:
+def history(request: Request, limit: int = 50) -> JSONResponse:
     """Past reconciled analyses.
 
     This is the only part of the system that outlives a session, and it holds
     results rather than documents - see backend/store.py.
     """
-    return JSONResponse(store.history(min(max(limit, 1), 200)))
+    return JSONResponse(store.history(min(max(limit, 1), 200), request.state.user.id))
 
 
 @app.get("/history/{row_id}")
-def history_row(row_id: str) -> JSONResponse:
-    row = store.get(row_id)
+def history_row(row_id: str, request: Request) -> JSONResponse:
+    row = store.get(row_id, request.state.user.id)
     if row is None:
         raise HTTPException(404, "No such entry in the audit history.")
     return JSONResponse(row)
@@ -518,6 +541,7 @@ def health() -> dict:
         "market_configured": market.configured(),
         "peers_loaded": bool(PEERS),
         "payment_required": payment.PAYMENT_REQUIRED,
+        "auth": auth.status(),
         "demo_variants": sorted(extract.FIXTURE_FILES),
         "storage": {**store.status(), **store.ping()},
         **session.stats(),

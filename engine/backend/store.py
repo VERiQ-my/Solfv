@@ -22,6 +22,7 @@ import json
 import os
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 
 try:
@@ -155,7 +156,7 @@ def _direct_save(row: dict) -> dict:
 # Writing
 # ---------------------------------------------------------------------------
 
-def _row(result: dict, record: dict, ledger: dict | None) -> dict:
+def _row(result: dict, record: dict, ledger: dict | None, owner_id: str) -> dict:
     """Flatten one analysis into the audit row.
 
     Note what is absent: no file, no page image path, no ledger entries. The
@@ -169,6 +170,7 @@ def _row(result: dict, record: dict, ledger: dict | None) -> dict:
     ledger = ledger or {}
 
     return {
+        "owner_id": owner_id,
         "session_id": record.get("session_id"),
         "document_name": record.get("document"),
         "source": record.get("source"),
@@ -207,15 +209,17 @@ def _row(result: dict, record: dict, ledger: dict | None) -> dict:
     }
 
 
-def save(result: dict, record: dict, ledger: dict | None = None) -> dict:
+def save(result: dict, record: dict, ledger: dict | None = None, owner_id: str = "") -> dict:
     """Persist one reconciled analysis. Never raises."""
+    if not owner_id:
+        return {"saved": False, "reason": "Analysis owner is missing."}
     if _mode() == "postgresql":
-        return _direct_save(_row(result, record, ledger))
+        return _direct_save(_row(result, record, ledger, owner_id))
     if not configured():
         return {"saved": False, "reason": "Supabase is not configured."}
 
     code, body = _request(
-        "POST", f"/{TABLE}", [_row(result, record, ledger)],
+        "POST", f"/{TABLE}", [_row(result, record, ledger, owner_id)],
         {"Prefer": "return=representation"},
     )
     if code in (200, 201):
@@ -236,15 +240,15 @@ _LIST_COLUMNS = (
 )
 
 
-def _direct_history(limit: int) -> dict:
+def _direct_history(limit: int, owner_id: str) -> dict:
     try:
         with _connection() as connection, connection.cursor(row_factory=dict_row) as cursor:
             cursor.execute(
-                sql.SQL("SELECT {} FROM {} ORDER BY created_at DESC LIMIT %s").format(
+                sql.SQL("SELECT {} FROM {} WHERE owner_id = %s ORDER BY created_at DESC LIMIT %s").format(
                     sql.SQL(", " ).join(map(sql.Identifier, _LIST_COLUMNS.split(","))),
                     sql.Identifier("public", TABLE),
                 ),
-                (limit,),
+                (owner_id, limit),
             )
             rows = cursor.fetchall()
         return {"available": True, "rows": _json_safe(rows)}
@@ -252,11 +256,11 @@ def _direct_history(limit: int) -> dict:
         return {"available": False, "rows": [], "reason": f"PostgreSQL read failed: {error}"}
 
 
-def _direct_get(row_id: str) -> dict | None:
+def _direct_get(row_id: str, owner_id: str) -> dict | None:
     try:
         with _connection() as connection, connection.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(sql.SQL("SELECT * FROM {} WHERE id = %s LIMIT 1").format(
-                sql.Identifier("public", TABLE)), (row_id,))
+            cursor.execute(sql.SQL("SELECT * FROM {} WHERE id = %s AND owner_id = %s LIMIT 1").format(
+                sql.Identifier("public", TABLE)), (row_id, owner_id))
             return _json_safe(cursor.fetchone())
     except Exception:  # noqa: BLE001 - callers treat unavailable as not found
         return None
@@ -272,18 +276,20 @@ def _direct_ping() -> dict:
         return {"ok": False, "reason": f"PostgreSQL unavailable: {error}"}
 
 
-def history(limit: int = 50) -> dict:
+def history(limit: int = 50, owner_id: str = "") -> dict:
     """Recent analyses, newest first. Summary columns only — the heavy JSONB
     payloads are fetched per row on demand."""
+    if not owner_id:
+        return {"available": False, "rows": [], "reason": "Analysis owner is missing."}
     if _mode() == "postgresql":
-        return _direct_history(limit)
+        return _direct_history(limit, owner_id)
     if not configured():
         return {"available": False, "rows": [],
                 "reason": "Supabase is not configured."}
 
     code, body = _request(
         "GET",
-        f"/{TABLE}?select={_LIST_COLUMNS}&order=created_at.desc&limit={int(limit)}",
+        f"/{TABLE}?select={_LIST_COLUMNS}&owner_id=eq.{urllib.parse.quote(owner_id, safe='')}&order=created_at.desc&limit={int(limit)}",
     )
     if code == 200 and isinstance(body, list):
         return {"available": True, "rows": body}
@@ -291,12 +297,14 @@ def history(limit: int = 50) -> dict:
             "reason": f"Supabase returned {code}: {body}"}
 
 
-def get(row_id: str) -> dict | None:
+def get(row_id: str, owner_id: str = "") -> dict | None:
+    if not owner_id:
+        return None
     if _mode() == "postgresql":
-        return _direct_get(row_id)
+        return _direct_get(row_id, owner_id)
     if not configured():
         return None
-    code, body = _request("GET", f"/{TABLE}?id=eq.{row_id}&select=*&limit=1")
+    code, body = _request("GET", f"/{TABLE}?id=eq.{urllib.parse.quote(row_id, safe='')}&owner_id=eq.{urllib.parse.quote(owner_id, safe='')}&select=*&limit=1")
     if code == 200 and isinstance(body, list) and body:
         return body[0]
     return None

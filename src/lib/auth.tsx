@@ -57,9 +57,26 @@ interface AuthState {
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim()
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim()
+const LOCAL_REQUESTED = import.meta.env.VITE_AUTH_MODE === 'local'
 
 export const AUTH_MODE: AuthMode =
   SUPABASE_URL && SUPABASE_KEY ? 'supabase' : 'local'
+
+export const AUTH_CONFIGURATION_ERROR =
+  Boolean(SUPABASE_URL) !== Boolean(SUPABASE_KEY)
+    ? 'Set both VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, or remove both.'
+    : !SUPABASE_URL && !LOCAL_REQUESTED
+      ? 'Authentication is not configured. Set Supabase credentials, or VITE_AUTH_MODE=local for development.'
+      : null
+
+let apiToken: string | null = null
+let localUserId: string | null = null
+
+export function apiAuthHeaders(): Record<string, string> {
+  if (AUTH_MODE === 'supabase' && apiToken) return { Authorization: `Bearer ${apiToken}` }
+  if (AUTH_MODE === 'local' && localUserId) return { 'X-Solfv-Dev-User': localUserId }
+  return {}
+}
 
 const Ctx = createContext<AuthState | null>(null)
 
@@ -230,7 +247,10 @@ interface SupabaseAuthUser {
   user_metadata?: { full_name?: string | null; name?: string | null } | null
 }
 
-interface SupabaseSession { user: SupabaseAuthUser }
+interface SupabaseSession {
+  user: SupabaseAuthUser
+  access_token: string
+}
 
 interface SupabaseAuth {
   getSession(): Promise<{ data: { session: SupabaseSession | null }; error: { message: string } | null }>
@@ -296,33 +316,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // reload never flashes the login screen at a signed-in user.
   useEffect(() => {
     live.current = true
+    let active = true
     let unsubscribe: (() => void) | undefined
 
     void (async () => {
       if (AUTH_MODE === 'local') {
-        if (live.current) { setUser(localBackend.current()); setReady(true) }
+        const current = localBackend.current()
+        localUserId = current?.id ?? null
+        if (active) { setUser(current); setReady(true) }
         return
       }
       try {
         const auth = await supabaseAuth()
         const { data } = await auth.getSession()
-        if (live.current) setUser(toUser(data.session?.user))
+        if (!active) return
+        apiToken = data.session?.access_token ?? null
+        setUser(toUser(data.session?.user))
         // Supabase refreshes tokens on its own clock; follow it rather than
         // holding a copy that can go stale.
         const listener = auth.onAuthStateChange((_event, session) => {
-          if (live.current) setUser(toUser(session?.user))
+          if (active) {
+            apiToken = session?.access_token ?? null
+            setUser(toUser(session?.user))
+          }
         })
         unsubscribe = () => listener.data.subscription.unsubscribe()
       } catch (caught) {
-        if (live.current) {
+        if (active) {
           setError(caught instanceof Error ? caught.message : String(caught))
         }
       } finally {
-        if (live.current) setReady(true)
+        if (active) setReady(true)
       }
     })()
 
-    return () => { live.current = false; unsubscribe?.() }
+    return () => { active = false; live.current = false; unsubscribe?.() }
   }, [])
 
   /** Every mutation runs through here so busy, error and notice can never
@@ -352,7 +380,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (AUTH_MODE === 'local') {
-        setUser(await localBackend.signUp(input))
+        const user = await localBackend.signUp(input)
+        localUserId = user.id
+        setUser(user)
         return null
       }
 
@@ -369,6 +399,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!data.session) {
         return 'Account created. Confirm the link we emailed you, then log in.'
       }
+      apiToken = data.session.access_token
       setUser(toUser(data.session.user))
       return null
     })
@@ -379,7 +410,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       assertCredentials(input)
 
       if (AUTH_MODE === 'local') {
-        setUser(await localBackend.logIn(input))
+        const user = await localBackend.logIn(input)
+        localUserId = user.id
+        setUser(user)
         return null
       }
 
@@ -389,6 +422,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password: input.password,
       })
       if (failure) throw new AuthError(failure.message, 'password')
+      apiToken = data.session?.access_token ?? null
       setUser(toUser(data.session?.user))
       return null
     })
@@ -403,6 +437,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // A failed sign-out must still clear the screen — leaving a signed-out
       // user looking at someone's dashboard is the worse failure.
     } finally {
+      apiToken = null
+      localUserId = null
       if (live.current) {
         setUser(null)
         setError(null)

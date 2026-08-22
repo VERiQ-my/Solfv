@@ -55,6 +55,10 @@ are accepted), or from the real environment, which always wins.
 | `VITE_API_BASE` | `http://127.0.0.1:8000` | Where the frontend looks for the engine. |
 | `VITE_SUPABASE_URL` | unset | Switches sign-in to Supabase Auth. The project URL, not the `/rest/v1` endpoint. |
 | `VITE_SUPABASE_ANON_KEY` | unset | The anon JWT the browser uses for auth. Never the service key. |
+| `VITE_AUTH_MODE` | unset | Set to `local` only for development browser-local accounts. |
+| `SOLFV_AUTH_MODE` | `supabase` | Engine auth mode; set to `local` only for development. |
+| `SOLFV_ENVIRONMENT` | `development` | Must not be `production` when local auth is enabled. |
+| `SOLFV_CORS_ORIGINS` | localhost dev URLs | Comma-separated allowed frontend origins for the engine. |
 
 ---
 

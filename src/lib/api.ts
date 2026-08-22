@@ -5,6 +5,7 @@ import type {
   Analysis, HistoryResult, MarketQuote, MarketSearchResult, MarketStatus,
   MarketTimeSeries, PaymentQuote, QueryResult, SolanaNetwork, UploadResult,
 } from '../types'
+import { apiAuthHeaders } from './auth'
 
 export const API_BASE: string =
   (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ||
@@ -20,7 +21,10 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response
   try {
-    response = await fetch(`${API_BASE}${path}`, init)
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: { ...apiAuthHeaders(), ...(init?.headers || {}) },
+    })
   } catch {
     throw new ApiError(
       `Cannot reach the SOLFV engine at ${API_BASE}. Start it with ` +
@@ -36,6 +40,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(String(detail), response.status)
   }
   return body as T
+}
+
+async function requestImage(path: string): Promise<string> {
+  const response = await fetch(`${API_BASE}${path}`, { headers: apiAuthHeaders() })
+  if (!response.ok) throw new ApiError(`Source page request failed (${response.status})`, response.status)
+  return URL.createObjectURL(await response.blob())
 }
 
 export const api = {
@@ -73,7 +83,7 @@ export const api = {
   history: (limit = 50) => request<HistoryResult>(`/history?limit=${limit}`),
 
   /** URL for a rendered source page. Only targeted pages are rasterised. */
-  pageImage: (sid: string, page: number) => `${API_BASE}/page/${sid}/${page}`,
+  pageImage: (sid: string, page: number) => requestImage(`/page/${sid}/${page}`),
 
   /* Market data. Proxied through the engine, never called from the browser —
    * the Twelve Data key is billable, and a key the frontend can read is a key

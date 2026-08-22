@@ -30,7 +30,7 @@ import Solana from './pages/Solana'
 import { Logo } from './components/Logo'
 import { Icon } from './components/ui'
 import { countdown } from './lib/format'
-import { AuthProvider, useAuth } from './lib/auth'
+import { AUTH_CONFIGURATION_ERROR, AuthProvider, useAuth } from './lib/auth'
 import type { AuthUser } from './lib/auth'
 import { NavProvider, SECTIONS, useNav } from './nav'
 import { SessionProvider, useSession } from './state'
@@ -84,6 +84,18 @@ function Root() {
   const [theme, toggleTheme] = useTheme()
   const [authPage, setAuthPage] = useState<'login' | 'signup'>('login')
   const [drawer, setDrawer] = useState(false)
+
+  if (AUTH_CONFIGURATION_ERROR) {
+    return (
+      <div className="min-h-screen grid place-content-center p-lg bg-background">
+        <div className="max-w-xl card p-xl space-y-md">
+          <Icon name="settings_alert" className="text-danger text-[28px]" />
+          <h1 className="text-headline-md text-primary">Authentication configuration required</h1>
+          <p className="text-body-md text-on-surface-variant">{AUTH_CONFIGURATION_ERROR}</p>
+        </div>
+      </div>
+    )
+  }
 
   // Feedback belongs to the screen that produced it. A failed log-in must not
   // greet the user on the sign-up form as if it were about that form.

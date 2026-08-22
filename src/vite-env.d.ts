@@ -6,6 +6,8 @@ interface ImportMetaEnv {
   readonly VITE_API_BASE?: string
   readonly VITE_SUPABASE_URL?: string
   readonly VITE_SUPABASE_ANON_KEY?: string
+  /** Development-only browser-local accounts; production must use Supabase. */
+  readonly VITE_AUTH_MODE?: 'local'
 }
 
 interface ImportMeta {

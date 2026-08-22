@@ -30,6 +30,7 @@ interface Boxed {
 export function SourcePane() {
   const { sid, analysis, focus } = useSession()
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'missing'>('idle')
+  const [src, setSrc] = useState<string | null>(null)
 
   const page = focus?.page ?? null
 
@@ -38,19 +39,22 @@ export function SourcePane() {
     return analysis.page_dimensions?.[String(page)] ?? FALLBACK_PAGE
   }, [analysis, page])
 
-  const src = sid && page != null ? api.pageImage(sid, page) : null
-
   useEffect(() => {
-    if (!src) { setStatus('idle'); return }
+    if (!sid || page == null) { setSrc(null); setStatus('idle'); return }
+    let active = true
+    let objectUrl: string | null = null
     setStatus('loading')
-    // Probe the image rather than relying on <img onError> alone, so the
-    // schematic swaps in without a flash of broken-image chrome.
-    const probe = new Image()
-    probe.onload = () => setStatus('ready')
-    probe.onerror = () => setStatus('missing')
-    probe.src = src
-    return () => { probe.onload = null; probe.onerror = null }
-  }, [src])
+    void api.pageImage(sid, page)
+      .then(url => {
+        objectUrl = url
+        if (active) { setSrc(url); setStatus('ready') }
+      })
+      .catch(() => { if (active) { setSrc(null); setStatus('missing') } })
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [sid, page])
 
   const boxes = useMemo<Boxed[]>(() => {
     if (!focus) return []
