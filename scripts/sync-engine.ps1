@@ -84,7 +84,7 @@ docker run --detach --name solfv-engine --restart unless-stopped --network solfv
 
 Start-Sleep -Seconds 3
 try {
-  $health = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/health | ConvertFrom-Json
+  $health = (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/health).Content | ConvertFrom-Json
   if (-not $health.ok) { throw 'The replacement engine did not report healthy.' }
 } catch {
   docker rm --force solfv-engine 2>$null | Out-Null
