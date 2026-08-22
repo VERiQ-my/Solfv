@@ -77,9 +77,9 @@ The local mode exists for the same reason the demo document does: the whole
 system has to be runnable with no keys. The sign-up screen says which mode it
 is in rather than implying an account system that is not there.
 
-**The engine has no auth.** CORS is open and every endpoint is unauthenticated
-— this gate is the frontend's alone, and it is a prototype's gate. Anyone who
-can reach port 8000 can reach the engine directly.
+The engine verifies the Supabase access token on every application endpoint.
+Only `/health` is public. In production it rejects local browser accounts, and
+audit records are scoped to the authenticated user's id.
 
 Both screens land on the **Command Center**, which aggregates the persisted
 audit history and therefore has something to say before a single document is
@@ -135,10 +135,57 @@ Every write fails soft. If Supabase is unreachable or misconfigured, the
 analysis still completes and the failure surfaces as a warning on the session
 rather than an error. Persistence is a convenience, never a dependency.
 
-**The RLS policies in `schema.sql` are permissive for the anon key**, which
-suits a single-tenant prototype and not production. There are deliberately no
-`update` or `delete` policies: an audit history callers can rewrite is not an
-audit history.
+The schema enables row-level security and supplies no anonymous access policy.
+The engine connects directly to PostgreSQL and scopes every query by the
+authenticated owner id. There are deliberately no `update` or `delete`
+policies: an audit history callers can rewrite is not an audit history.
+
+---
+
+## Cloudflare free deployment (`solfv.veriq.my`)
+
+The repository includes a Cloudflare Worker that serves the Vite app and
+proxies `/api/*` to a separately hosted Python engine. The static frontend and
+proxy run on the Workers Free plan; the custom-domain route is configured for
+`solfv.veriq.my`.
+
+Before the first deploy, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+as build-time variables in an uncommitted `.env.production.local` (they are
+public browser configuration, never a service-role key). Then run:
+
+```bash
+npm run deploy
+```
+
+After deployment, add the Worker plain-text variable `ENGINE_ORIGIN`, for
+example `https://engine.example.com`. The Worker forwards `/api/*` to that
+engine while the browser remains on `solfv.veriq.my`; do not append `/api` to
+the value. The engine needs server-side `DATABASE_URL`, `SUPABASE_URL`, and
+`SUPABASE_ANON_KEY` configuration.
+
+The free Worker cannot run the included Python/Docker engine. A free external
+host can be used but typically sleeps when idle; a Cloudflare Tunnel is also
+free but needs a machine that stays online.
+
+### Local engine via Cloudflare Tunnel
+
+This repository is configured for a named tunnel at `api.solfv.veriq.my`.
+`solfv-engine` (the FastAPI engine) and `solfv-tunnel` (the connector) run as
+Docker containers on the same private Docker network and use
+`--restart unless-stopped`. The engine exposes port 8000 only on
+`127.0.0.1`; the tunnel is the only public path to it.
+
+For the API to remain available, keep this Windows machine powered on, online,
+and ensure Docker Desktop starts after sign-in. Check both services with:
+
+```bash
+docker ps --filter name=solfv-engine --filter name=solfv-tunnel
+curl https://solfv.veriq.my/api/health
+```
+
+The tunnel credentials are kept outside the repository in the user
+`.cloudflared` directory. Treat them as secrets and revoke the tunnel from the
+Cloudflare dashboard if this computer is no longer trusted.
 
 ---
 

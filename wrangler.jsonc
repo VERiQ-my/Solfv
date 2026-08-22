@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "solfv",
+  "main": "./cloudflare/worker.ts",
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "solfv.veriq.my", "custom_domain": true }
+  ],
+  "vars": {
+    "ENGINE_ORIGIN": "https://api.solfv.veriq.my"
+  },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["SolfvEngine"] }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "SOLFV_ENGINE", "class_name": "SolfvEngine" }
+    ]
+  },
+  "observability": { "enabled": true, "head_sampling_rate": 1 }
+}

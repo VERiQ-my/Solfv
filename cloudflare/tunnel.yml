@@ -1,0 +1,7 @@
+tunnel: 05ba27d0-cd5c-4bd3-9fc4-db0e3d673a8f
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: api.solfv.veriq.my
+    service: http://solfv-engine:8000
+  - service: http_status:404
