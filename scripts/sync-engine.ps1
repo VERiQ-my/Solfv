@@ -44,8 +44,11 @@ if ($localHead -ne $remoteHead) {
 
 $targetEngineTree = (git rev-parse HEAD:engine).Trim()
 $deployedLabels = docker inspect --format '{{json .Config.Labels}}' solfv-engine 2>$null
-$deployedEngineTree = if ($deployedLabels) {
-  (($deployedLabels | ConvertFrom-Json).'solfv.engine.tree').Trim()
+$deployedLabelTree = if ($deployedLabels) {
+  ($deployedLabels | ConvertFrom-Json).'solfv.engine.tree'
+}
+$deployedEngineTree = if ($deployedLabelTree) {
+  $deployedLabelTree.Trim()
 } else {
   ''
 }
