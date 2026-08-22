@@ -16,7 +16,10 @@ import {
 } from '../components/ui'
 import { api } from '../lib/api'
 import { useSession } from '../state'
-import type { Candle, MarketMatch, MarketQuote, MarketStatus } from '../types'
+import type {
+  Candle, CryptoAsset, CryptoMarket, CryptoStatus,
+  MarketMatch, MarketQuote, MarketStatus,
+} from '../types'
 
 type Range = '1m' | '6m' | '1y' | '5y'
 
@@ -79,31 +82,31 @@ export default function Market() {
     if (symbol) void load(symbol, exchange, range)
   }, [symbol, exchange, range, load])
 
-  if (status && !status.configured) {
-    return (
-      <div className="space-y-xl">
-        <Heading />
-        <NotConfigured
-          icon="key_off"
-          title="No market feed is connected"
-          body="Market Intelligence proxies Twelve Data through the engine. Without a key there is nothing to chart, and the analysis pipeline runs without market enrichment."
-          requirement={
-            <>
-              Add <code className="mono text-secondary">TWELVE_DATA_API_KEY</code> to the{' '}
-              <code className="mono text-secondary">.env</code> at the repository root and
-              restart the engine.
-              <p className="mt-sm">{status.reason}</p>
-            </>
-          }
-        />
-      </div>
-    )
-  }
+  const stocksUnconfigured = !!status && !status.configured
 
   return (
     <div className="space-y-xl">
       <Heading />
 
+      {/* Stocks section — Twelve Data. Requires a key; when absent the panel
+          degrades in place instead of hiding the whole page, so the crypto
+          section below stays reachable. */}
+      {stocksUnconfigured ? (
+        <NotConfigured
+          icon="key_off"
+          title="No stock feed is connected"
+          body="Company share prices are proxied through Twelve Data. Without a key there is nothing to chart on the equities side, and the analysis pipeline runs without stock-market enrichment. The crypto market feed below is unaffected."
+          requirement={
+            <>
+              Add <code className="mono text-secondary">TWELVE_DATA_API_KEY</code> to the{' '}
+              <code className="mono text-secondary">.env</code> at the repository root and
+              restart the engine.
+              <p className="mt-sm">{status?.reason}</p>
+            </>
+          }
+        />
+      ) : (
+      <>
       <SymbolPicker
         onPick={(match) => { setSymbol(match.symbol); setExchange(match.exchange ?? undefined) }}
         current={symbol}
@@ -170,6 +173,13 @@ export default function Market() {
       )}
 
       <EngineLink analysisTicker={analysis?.ticker ?? null} warnings={analysis?.warnings ?? []} />
+      </>
+      )}
+
+      {/* Crypto section — CoinGecko, always rendered. Independent of the stock
+          feed above so an unconfigured Twelve Data key does not blank the
+          page, and so the advisor's universe is always visible here too. */}
+      <CryptoMarketPanel />
     </div>
   )
 }
@@ -178,13 +188,14 @@ function Heading() {
   return (
     <header className="flex flex-col md:flex-row md:items-end justify-between gap-md">
       <div className="min-w-0">
-        <span className="eyebrow">Twelve Data · proxied by the engine</span>
+        <span className="eyebrow">Twelve Data + CoinGecko · proxied by the engine</span>
         <h2 className="text-headline-lg md:text-display-lg text-primary mt-xs">
           Market Intelligence
         </h2>
         <p className="text-body-lg text-on-surface-variant mt-xs max-w-prose">
-          Live pricing for listed issuers, and the feed that upgrades the engine's distress
-          model from the private-company variant to the listed one.
+          Live equities for listed issuers — the feed that upgrades the engine's distress
+          model from the private-company variant to the listed one — and a live crypto
+          snapshot that feeds the AI research advisor.
         </p>
       </div>
     </header>
@@ -542,5 +553,175 @@ function EngineLink({
         </div>
       )}
     </Card>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Crypto market panel — CoinGecko, always visible                             */
+/* -------------------------------------------------------------------------- */
+
+/** The live crypto universe the advisor draws from.
+ *
+ *  Rendered as a compact table rather than a chart because the equities half
+ *  of the page already owns the chart affordance, and duplicating it would
+ *  make the section read as competing with itself. The point of this table is
+ *  provenance: every candidate the advisor might shortlist is right here, with
+ *  its live price, and the reviewer can trace one to the other by symbol.
+ */
+function CryptoMarketPanel() {
+  const [status, setStatus] = useState<CryptoStatus | null>(null)
+  const [market, setMarket] = useState<CryptoMarket | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      setMarket(await api.cryptoMarket(25))
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void api.cryptoStatus().then(setStatus).catch(() => setStatus(null))
+    void load()
+  }, [load])
+
+  const rows = market?.assets ?? []
+
+  return (
+    <Card
+      title="Crypto market"
+      subtitle={
+        status?.market.configured
+          ? `${status.market.provider} · ${status.market.plan} plan · cached ${status.market.cache_ttl}s`
+          : 'CoinGecko public endpoint — heavily rate-limited'
+      }
+      icon="currency_bitcoin"
+      action={
+        <button className="btn-secondary btn-sm" onClick={load} disabled={loading}>
+          <Icon name="refresh" className="text-[16px]" />
+          {loading ? 'Refreshing…' : 'Refresh'}
+        </button>
+      }
+    >
+      {error && (
+        <div className="flex items-start gap-md p-md rounded-md
+                        border border-warning/30 bg-warning/5">
+          <Icon name="error" className="text-warning shrink-0" />
+          <div className="min-w-0">
+            <b className="block text-body-md text-primary">
+              CoinGecko refused the request.
+            </b>
+            <p className="text-body-sm text-on-surface-variant mt-xs break-words">{error}</p>
+            <p className="text-body-sm text-on-surface-variant mt-xs">
+              The demo endpoint rate-limits aggressively. Try again in a minute.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {loading && rows.length === 0 ? (
+        <Spinner label="Loading crypto market…" />
+      ) : rows.length === 0 && !error ? (
+        <Empty
+          icon="inbox"
+          title="No crypto data yet"
+          body="The provider returned an empty list. Try refreshing."
+        />
+      ) : rows.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="data-table min-w-[800px]">
+            <thead>
+              <tr>
+                <th className="text-right w-8">#</th>
+                <th>Asset</th>
+                <th className="text-right">Price</th>
+                <th className="text-right">24h</th>
+                <th className="text-right">7d</th>
+                <th className="text-right">Market cap</th>
+                <th className="text-right">24h volume</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(asset => <CryptoRow key={asset.asset_id} asset={asset} />)}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {market && (
+        <p className="flex items-start gap-xs px-lg py-md border-t border-hairline
+                      text-body-sm text-on-surface-variant">
+          <Icon name="info" className="text-[16px] shrink-0 mt-px" />
+          Snapshot fetched {market.fetched_at} · priced in {market.vs_currency.toUpperCase()} ·
+          this universe feeds the AI advisor on the Crypto Candidates tab.
+        </p>
+      )}
+    </Card>
+  )
+}
+
+function CryptoRow({ asset }: { asset: CryptoAsset }) {
+  const price = asset.price
+  const change24 = asset.change_24h_pct
+  const change7d = asset.change_7d_pct
+  const currency = (asset.vs_currency || 'usd').toUpperCase()
+
+  return (
+    <tr className="row-hover">
+      <td className="mono text-right text-on-surface-variant">
+        {asset.market_cap_rank ?? '—'}
+      </td>
+      <td>
+        <div className="flex items-center gap-sm min-w-0">
+          {asset.image ? (
+            <img
+              src={asset.image} alt=""
+              className="h-6 w-6 rounded-full bg-surface-container-lowest shrink-0"
+              loading="lazy"
+            />
+          ) : (
+            <span className="h-6 w-6 rounded-full bg-surface-container-high shrink-0" />
+          )}
+          <span className="min-w-0">
+            <b className="block text-body-md text-primary truncate">{asset.name ?? asset.asset_id}</b>
+            <small className="mono text-body-sm text-on-surface-variant">{asset.symbol}</small>
+          </span>
+        </div>
+      </td>
+      <td className="mono text-right text-primary font-semibold">
+        {price == null
+          ? '—'
+          : new Intl.NumberFormat('en-MY', {
+              style: 'currency', currency,
+              maximumFractionDigits: price < 1 ? 4 : 2,
+            }).format(price)}
+      </td>
+      <td className={`mono text-right ${change24 == null ? 'text-on-surface-variant'
+        : change24 >= 0 ? 'text-success' : 'text-danger'}`}>
+        {change24 == null ? '—' : `${change24 >= 0 ? '+' : ''}${change24.toFixed(2)}%`}
+      </td>
+      <td className={`mono text-right ${change7d == null ? 'text-on-surface-variant'
+        : change7d >= 0 ? 'text-success' : 'text-danger'}`}>
+        {change7d == null ? '—' : `${change7d >= 0 ? '+' : ''}${change7d.toFixed(2)}%`}
+      </td>
+      <td className="mono text-right text-on-surface">
+        {asset.market_cap == null
+          ? '—'
+          : new Intl.NumberFormat('en-MY', { notation: 'compact', maximumFractionDigits: 1 })
+              .format(asset.market_cap)}
+      </td>
+      <td className="mono text-right text-on-surface-variant">
+        {asset.volume_24h == null
+          ? '—'
+          : new Intl.NumberFormat('en-MY', { notation: 'compact', maximumFractionDigits: 1 })
+              .format(asset.volume_24h)}
+      </td>
+    </tr>
   )
 }

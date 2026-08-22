@@ -2,8 +2,10 @@
  *  single source of truth and reaches the components verbatim. */
 
 import type {
-  Analysis, HistoryResult, MarketQuote, MarketSearchResult, MarketStatus,
-  MarketTimeSeries, PaymentQuote, QueryResult, SolanaNetwork, UploadResult,
+  AdvisorReport, Analysis, CryptoMarket, CryptoStatus, HistoryResult,
+  MarketQuote, MarketSearchResult, MarketStatus, MarketTimeSeries, PaperOrderResult,
+  PaperQuote, PaperStatus, PaymentQuote, PaymentRecord, QueryResult, SolanaNetwork,
+  UploadResult,
 } from '../types'
 import { apiAuthHeaders } from './auth'
 
@@ -106,4 +108,51 @@ export const api = {
       `&interval=${encodeURIComponent(interval)}&outputsize=${outputsize}` +
       (exchange ? `&exchange=${encodeURIComponent(exchange)}` : ''),
     ),
+
+  /* Crypto market — CoinGecko, proxied by the engine. Same reason: the key is
+   * billable and rate-limited, and the frontend must never carry it. */
+
+  cryptoStatus: () => request<CryptoStatus>('/crypto/status'),
+
+  cryptoMarket: (limit = 25) =>
+    request<CryptoMarket>(`/crypto/market?limit=${limit}`),
+
+  /* AI research advisor — DeepSeek from the backend, with a deterministic
+   * fallback when the key is absent. Returns candidates a human must review;
+   * never emits BUY/SELL. Framed as research support under Malaysian rules. */
+
+  advisor: (sid: string, limit = 25) =>
+    request<AdvisorReport>(`/advisor/${sid}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limit }),
+    }),
+
+  /* Solana devnet x402 paper-order flow — SOLANA TRACK.
+   * The advisor recommends candidates for free; only "simulate a purchase"
+   * triggers the payment gate, which verifies a real devnet USDC transfer
+   * before returning the paper receipt. No cryptocurrency is bought. */
+
+  paperStatus: () => request<PaperStatus>('/paper/status'),
+
+  paperQuote: (sid: string, assetId: string, notionalUsd: number) =>
+    request<PaperQuote>(
+      `/paper/${sid}/quote?asset_id=${encodeURIComponent(assetId)}` +
+      `&notional_usd=${notionalUsd}`,
+    ),
+
+  paperOrder: (sid: string, assetId: string, notionalUsd: number,
+                signature?: string) =>
+    request<PaperOrderResult>(`/paper/${sid}/order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        asset_id: assetId,
+        notional_usd: notionalUsd,
+        transaction_signature: signature ?? null,
+      }),
+    }),
+
+  paperHistory: (limit = 50) =>
+    request<{ rows: PaymentRecord[] }>(`/paper/history?limit=${limit}`),
 }

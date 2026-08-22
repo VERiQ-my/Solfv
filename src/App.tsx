@@ -30,7 +30,7 @@ import Solana from './pages/Solana'
 import { Logo } from './components/Logo'
 import { Icon } from './components/ui'
 import { countdown } from './lib/format'
-import { AUTH_CONFIGURATION_ERROR, AuthProvider, useAuth } from './lib/auth'
+import { AUTH_CONFIGURATION_ERROR, useAuth } from './lib/auth'
 import type { AuthUser } from './lib/auth'
 import { NavProvider, SECTIONS, useNav } from './nav'
 import { SessionProvider, useSession } from './state'
@@ -48,11 +48,7 @@ const HEADINGS: Record<Section, string> = {
 }
 
 export default function App() {
-  return (
-    <AuthProvider>
-      <Root />
-    </AuthProvider>
-  )
+  return <DemoRoot />
 }
 
 type Theme = 'light' | 'dark'
@@ -77,6 +73,27 @@ function useTheme(): [Theme, () => void] {
     [],
   )
   return [theme, toggle]
+}
+
+const DEMO_USER: AuthUser = {
+  id: 'demo-user',
+  email: 'demo@solfv.local',
+  name: 'Demo workspace',
+}
+
+/** The judging path starts at the dashboard; production can still use Root. */
+function DemoRoot() {
+  const [theme, toggleTheme] = useTheme()
+  const [drawer, setDrawer] = useState(false)
+
+  return (
+    <SessionProvider key={DEMO_USER.id}>
+      <NavProvider initialSection="dashboard" onNavigate={() => setDrawer(false)}>
+        <Shell drawer={drawer} setDrawer={setDrawer} theme={theme}
+               onTheme={toggleTheme} user={DEMO_USER} />
+      </NavProvider>
+    </SessionProvider>
+  )
 }
 
 function Root() {
@@ -221,7 +238,7 @@ function Sidebar({ user }: { user: AuthUser }) {
       )}
 
       <div className="px-gutter mt-auto pt-lg space-y-sm">
-        <AccountChip user={user} />
+        <DemoWorkspaceChip />
         <button
           className="btn-secondary btn-full"
           onClick={purgeAll}
@@ -323,6 +340,24 @@ function AccountChip({ user }: { user: AuthUser }) {
       >
         <Icon name="logout" className="text-[18px]" />
       </button>
+    </div>
+  )
+}
+
+function DemoWorkspaceChip() {
+  return (
+    <div className="flex items-center gap-sm p-sm rounded-md border border-hairline
+                    bg-surface-container-low">
+      <span className="h-8 w-8 shrink-0 rounded-full grid place-items-center
+                       bg-primary text-on-primary text-label-sm" aria-hidden="true">
+        D
+      </span>
+      <span className="min-w-0 flex-1">
+        <b className="block text-body-sm text-primary truncate">Demo workspace</b>
+        <small className="block text-body-sm text-on-surface-variant truncate">
+          Anonymous session
+        </small>
+      </span>
     </div>
   )
 }
@@ -473,7 +508,7 @@ function MobileDrawer({
           <NavList />
         </nav>
         <div className="px-gutter pt-lg space-y-sm">
-          <AccountChip user={user} />
+          <DemoWorkspaceChip />
           <button
             className="btn-secondary btn-full"
             onClick={() => { purgeAll(); onClose() }}
