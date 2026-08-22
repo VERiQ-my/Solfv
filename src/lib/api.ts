@@ -11,7 +11,9 @@ import { apiAuthHeaders } from './auth'
 
 export const API_BASE: string =
   (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ||
-  'http://127.0.0.1:8000'
+  // Production is served by the Cloudflare Worker, which proxies this path to
+  // the Python engine. Local Vite development still talks to the local engine.
+  (import.meta.env.PROD ? '/api' : 'http://127.0.0.1:8000')
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
