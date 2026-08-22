@@ -7,10 +7,22 @@
  * render that as "withheld", never as zero.
  */
 
-/** Navigation targets. Kept here so pages can type their own `go` prop. */
-export type Page =
-  | 'analysis' | 'overview' | 'saydo' | 'benchmark'
-  | 'risk' | 'privacy' | 'history' | 'metering'
+/** Top-level navigation. Six destinations, matching the design system's
+ *  sidebar. Analysis is the only one that carries sub-navigation, because the
+ *  engine's outputs are all lenses on a single reconciled document rather than
+ *  separate places to be. */
+export type Section =
+  | 'dashboard' | 'analysis' | 'market' | 'expenses' | 'solana' | 'privacy'
+
+/** Lenses on the selected document, shown as tabs inside Analysis. */
+export type AnalysisTab =
+  | 'documents' | 'overview' | 'provenance' | 'saydo' | 'benchmark' | 'risk'
+
+/** A resolved location. `tab` is only meaningful when `section` is 'analysis'. */
+export interface Route {
+  section: Section
+  tab: AnalysisTab
+}
 
 export type Trust = 'VERIFIED' | 'DERIVED' | 'UNVERIFIED'
 export type CheckStatus = 'PASS' | 'FAIL' | 'UNVERIFIABLE'
@@ -193,6 +205,19 @@ export interface PaymentQuote {
   model: string
 }
 
+/** Live cluster state. Every field is nullable and carries `reason` when the
+ *  RPC could not answer — there is no fallback figure for a balance. */
+export interface SolanaNetwork {
+  cluster: string
+  rpc_url: string
+  treasury: string | null
+  reachable: boolean
+  version: string | null
+  slot: number | null
+  balance_sol: number | null
+  reason: string | null
+}
+
 /** One row of the Supabase audit history.
  *
  *  Results only — the audit table holds no document, no page image and no
@@ -226,4 +251,68 @@ export interface HistoryResult {
   available: boolean
   rows: HistoryRow[]
   reason?: string
+}
+
+/* -------------------------------------------------------------------------- */
+/* Market data (Twelve Data, proxied by the engine)                            */
+/* -------------------------------------------------------------------------- */
+
+export interface MarketStatus {
+  configured: boolean
+  provider: string
+  reason: string | null
+  cache_ttl: number
+  filing_exchange: string | null
+}
+
+export interface MarketMatch {
+  symbol: string
+  name: string | null
+  exchange: string | null
+  country: string | null
+  currency: string | null
+  type: string | null
+}
+
+export interface MarketSearchResult {
+  results: MarketMatch[]
+}
+
+/** Every numeric field is nullable: Twelve Data omits fields per instrument,
+ *  and a missing figure must not be rendered as zero. */
+export interface MarketQuote {
+  symbol: string
+  name: string | null
+  exchange: string | null
+  currency: string | null
+  datetime: string | null
+  open: number | null
+  high: number | null
+  low: number | null
+  close: number | null
+  previous_close: number | null
+  change: number | null
+  percent_change: number | null
+  volume: number | null
+  average_volume: number | null
+  fifty_two_week_high: number | null
+  fifty_two_week_low: number | null
+  is_market_open: boolean | null
+}
+
+export interface Candle {
+  datetime: string
+  open: number | null
+  high: number | null
+  low: number | null
+  close: number | null
+  volume: number | null
+}
+
+export interface MarketTimeSeries {
+  symbol: string
+  currency: string | null
+  exchange: string | null
+  interval: string
+  values: Candle[]
 }

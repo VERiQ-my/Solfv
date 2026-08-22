@@ -9,19 +9,16 @@
 
 import { useMemo, useState } from 'react'
 import { SourcePane } from '../components/SourcePane'
-import { Card, Empty, Icon, PageIntro, SourceLink, StatusPill, TrustBadge } from '../components/ui'
+import {
+  Card, Empty, Icon, Segmented, SourceLink, StatusPill, TrustBadge,
+} from '../components/ui'
 import { RATIO_LABELS, RATIO_ORDER, exact, money, ratio as fmtRatio } from '../lib/format'
 import { api } from '../lib/api'
 import { useSession } from '../state'
 import type { Focus } from '../state'
 import type { QueryResult, Trust } from '../types'
 
-const FILTERS: { id: string; label: string }[] = [
-  { id: 'all', label: 'All figures' },
-  { id: 'VERIFIED', label: 'Verified' },
-  { id: 'DERIVED', label: 'Derived' },
-  { id: 'UNVERIFIED', label: 'Unverified' },
-]
+type Filter = 'all' | Trust
 
 const SUGGESTIONS = [
   'What is the current ratio?',
@@ -30,11 +27,13 @@ const SUGGESTIONS = [
   'How many employees are there?',
 ]
 
-/** `embedded` drops the page heading — on the Analysis page this sits beneath
- *  the document queue and a second full-height title would read as a new page. */
-export default function Provenance({ embedded = false }: { embedded?: boolean }) {
+const TRUST_DOT: Record<Trust, string> = {
+  VERIFIED: 'bg-success', DERIVED: 'bg-secondary', UNVERIFIED: 'bg-warning',
+}
+
+export default function Provenance() {
   const { sid, analysis, focus, setFocus } = useSession()
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useState<Filter>('all')
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState<QueryResult | null>(null)
   const [asking, setAsking] = useState(false)
@@ -119,93 +118,115 @@ export default function Provenance({ embedded = false }: { embedded?: boolean })
     }
   }
 
-  const legend = (
-    <div className="trust-legend">
-      {(['VERIFIED', 'DERIVED', 'UNVERIFIED'] as Trust[]).map(trust => (
-        <span key={trust} className={`legend trust-${trust.toLowerCase()}`}>
-          <i />{counts[trust]} {trust.toLowerCase()}
-        </span>
-      ))}
-    </div>
-  )
-
   return (
-    <div className={embedded ? 'embedded-detail' : 'content'}>
-      {embedded ? (
-        <div className="embedded-head">
-          <div>
-            <span className="eyebrow">CLICK-TO-SOURCE</span>
-            <b>{analysis.entity || 'Document'} — figures & provenance</b>
-          </div>
-          {legend}
+    <div className="space-y-xl">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-md">
+        <div className="min-w-0">
+          <span className="eyebrow">Click to source</span>
+          <h2 className="text-headline-lg text-primary mt-xs truncate">
+            {analysis.entity || 'Document'} — figures &amp; provenance
+          </h2>
+          <p className="text-body-md text-on-surface-variant mt-xs max-w-prose">
+            Every figure traces to a page and a cell in the original document, or it is
+            not trusted. Nothing on this screen is unsourced.
+          </p>
         </div>
-      ) : (
-        <PageIntro
-          eyebrow="CLICK-TO-SOURCE"
-          title="Figures & provenance"
-          lede="Every figure traces to a page and a cell in the original document, or it is not trusted. Nothing on this screen is unsourced."
-        >
-          {legend}
-        </PageIntro>
-      )}
+        <div className="flex flex-wrap items-center gap-sm shrink-0">
+          {(['VERIFIED', 'DERIVED', 'UNVERIFIED'] as Trust[]).map(trust => (
+            <span key={trust} className="chip">
+              <span className={`dot ${TRUST_DOT[trust]}`} />
+              {counts[trust]} {trust.toLowerCase()}
+            </span>
+          ))}
+        </div>
+      </header>
 
       <Card
         title="Ask the document"
         subtitle="A structured lookup, not a chatbot. It retrieves figures; it never generates them."
         icon="search"
-        action={<span className="card-tag">CANNOT HALLUCINATE</span>}
+        action={<span className="badge-neutral">Cannot hallucinate</span>}
       >
-        <form className="query-bar" onSubmit={event => { event.preventDefault(); void ask() }}>
-          <Icon name="quick_reference_all" />
-          <input
-            value={question}
-            onChange={event => setQuestion(event.target.value)}
-            placeholder="Ask for any figure or ratio in this document…"
-            aria-label="Ask the document"
-          />
-          <button className="btn primary" type="submit" disabled={asking || !question.trim()}>
-            {asking ? <span className="spinner small" /> : <Icon name="arrow_forward" />}
+        <form
+          className="flex flex-col sm:flex-row gap-sm"
+          onSubmit={event => { event.preventDefault(); void ask() }}
+        >
+          <div className="relative flex-1">
+            <Icon
+              name="quick_reference_all"
+              className="absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant
+                         text-[20px] pointer-events-none"
+            />
+            <input
+              className="input pl-xl"
+              value={question}
+              onChange={event => setQuestion(event.target.value)}
+              placeholder="Ask for any figure or ratio in this document…"
+              aria-label="Ask the document"
+            />
+          </div>
+          <button className="btn-primary shrink-0" type="submit" disabled={asking || !question.trim()}>
+            {asking ? <span className="spinner" /> : <Icon name="arrow_forward" className="text-[16px]" />}
             Ask
           </button>
         </form>
 
-        <div className="suggestions">
+        <div className="flex flex-wrap gap-xs mt-md">
           {SUGGESTIONS.map(text => (
-            <button key={text} className="chip" onClick={() => void ask(text)}>{text}</button>
+            <button
+              key={text}
+              className="chip normal-case hover:bg-secondary/10 hover:text-secondary transition-colors"
+              onClick={() => void ask(text)}
+            >
+              {text}
+            </button>
           ))}
         </div>
 
         {answer && (
           'not_found' in answer && answer.not_found ? (
-            <div className="answer answer-miss">
-              <Icon name="do_not_disturb_on" />
-              <div>
-                <b>Not found — and that is a fact, not a guess.</b>
-                <p>{answer.message}</p>
-                <small>
-                  The lookup is a dictionary hit or miss, so absence is provable.
-                  A vector search would have returned the nearest chunks regardless.
+            <div className="mt-md flex items-start gap-md p-md rounded-md
+                            border border-warning/30 bg-warning/5">
+              <Icon name="do_not_disturb_on" className="text-warning text-[24px] shrink-0" />
+              <div className="min-w-0">
+                <b className="block text-body-md text-primary">
+                  Not found — and that is a fact, not a guess.
+                </b>
+                <p className="text-body-md text-on-surface-variant mt-xs">{answer.message}</p>
+                <small className="block text-body-sm text-on-surface-variant mt-sm">
+                  The lookup is a dictionary hit or miss, so absence is provable. A vector
+                  search would have returned the nearest chunks regardless.
                 </small>
               </div>
             </div>
           ) : (
-            <div className="answer answer-hit">
-              <header>
+            <div className="mt-md p-md rounded-md border border-hairline bg-surface-container-low">
+              <header className="flex items-center gap-sm">
                 <TrustBadge trust={answer.trust} />
-                <span className="muted">retrieved, not generated</span>
+                <span className="text-body-sm text-on-surface-variant">
+                  retrieved, not generated
+                </span>
               </header>
-              <p className="answer-text">{answer.answer}</p>
+              <p className="text-body-lg text-primary mt-sm">{answer.answer}</p>
               {answer.inputs && answer.inputs.length > 0 && (
-                <div className="answer-inputs">
+                <div className="flex flex-wrap gap-sm mt-md">
                   {answer.inputs.map(input => (
                     <button
                       key={input.canonical_key}
-                      className="input-cell"
                       onClick={() => focusItem(input.canonical_key)}
+                      className="text-left px-md py-sm rounded border border-hairline
+                                 bg-surface-container-lowest hover:border-secondary
+                                 transition-colors"
                     >
-                      <small>{input.label || input.canonical_key}</small>
-                      <b className="mono">{exact(input.value, analysis.unit)}</b>
-                      {input.page != null && <span>p.{input.page}</span>}
+                      <small className="block text-body-sm text-on-surface-variant">
+                        {input.label || input.canonical_key}
+                      </small>
+                      <b className="mono text-primary">{exact(input.value, analysis.unit)}</b>
+                      {input.page != null && (
+                        <span className="ml-xs text-body-sm text-secondary mono">
+                          p.{input.page}
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -215,111 +236,142 @@ export default function Provenance({ embedded = false }: { embedded?: boolean })
         )}
       </Card>
 
-      <div className="pane-tabs">
-        <button className={mobileTab === 'figures' ? 'selected' : ''} onClick={() => setMobileTab('figures')}>
-          <Icon name="table_rows" />Figures
-        </button>
-        <button className={mobileTab === 'source' ? 'selected' : ''} onClick={() => setMobileTab('source')}>
-          <Icon name="description" />Source{focus?.page != null && ` · p.${focus.page}`}
-        </button>
+      {/* Pane switch, small screens only. */}
+      <div className="lg:hidden">
+        <Segmented
+          value={mobileTab}
+          onChange={setMobileTab}
+          options={[
+            { id: 'figures', label: 'Figures' },
+            { id: 'source', label: focus?.page != null ? `Source · p.${focus.page}` : 'Source' },
+          ]}
+        />
       </div>
 
-      <section className={`split-screen tab-${mobileTab}`}>
-        <div className="pane pane-figures">
-          <div className="filter-tabs">
-            {FILTERS.map(option => (
-              <button
-                key={option.id}
-                className={filter === option.id ? 'selected' : ''}
-                onClick={() => setFilter(option.id)}
-              >
-                {option.label}
-                {option.id !== 'all' && (
-                  <em>{counts[option.id as Trust]}</em>
-                )}
-              </button>
-            ))}
-          </div>
-
-          {items.length === 0 ? (
-            <Empty
-              icon="filter_alt_off"
-              title="No figures at this trust level"
-              body="Every extracted figure sits in another band."
-            />
-          ) : (
-            <div className="item-table">
-              <div className="item-head">
-                <span>FIGURE</span><span>VALUE</span><span>TRUST</span><span>SOURCE</span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter items-start">
+        <div className={`lg:col-span-7 space-y-gutter
+                         ${mobileTab === 'figures' ? '' : 'hidden lg:block'}`}>
+          <Card
+            title="Extracted figures"
+            icon="table_rows"
+            bodyClassName=""
+            action={
+              <Segmented
+                value={filter}
+                onChange={setFilter}
+                options={[
+                  { id: 'all', label: 'All' },
+                  { id: 'VERIFIED', label: `Verified ${counts.VERIFIED}` },
+                  { id: 'DERIVED', label: `Derived ${counts.DERIVED}` },
+                  { id: 'UNVERIFIED', label: `Unverified ${counts.UNVERIFIED}` },
+                ]}
+              />
+            }
+          >
+            {items.length === 0 ? (
+              <div className="p-lg">
+                <Empty
+                  icon="filter_alt_off"
+                  title="No figures at this trust level"
+                  body="Every extracted figure sits in another band."
+                />
               </div>
-              {items.map(item => {
-                const active = focus?.bbox && item.bbox &&
-                  focus.bbox.join() === item.bbox.join()
+            ) : (
+              <div className="divide-y divide-hairline max-h-[560px] overflow-y-auto">
+                {items.map(item => {
+                  const current = focus?.bbox && item.bbox &&
+                    focus.bbox.join() === item.bbox.join()
+                  return (
+                    <button
+                      key={item.canonical_key}
+                      onClick={() => focusItem(item.canonical_key)}
+                      className={`w-full text-left grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_auto_auto]
+                        items-center gap-sm px-lg py-sm transition-colors
+                        hover:bg-surface-container-low
+                        ${current ? 'bg-secondary/5 shadow-[inset_3px_0_0_0_rgb(var(--c-secondary))]' : ''}`}
+                    >
+                      <span className="min-w-0">
+                        <b className="block text-body-md text-primary truncate">
+                          {item.label_as_printed || item.canonical_key.replace(/_/g, ' ')}
+                        </b>
+                        <small className="block text-body-sm text-on-surface-variant truncate">
+                          {item.canonical_key}
+                          {item.checked_by?.length
+                            ? ` · cleared by ${item.checked_by.length} check${item.checked_by.length > 1 ? 's' : ''}`
+                            : item.derived ? ` · ${item.derivation}` : ''}
+                        </small>
+                      </span>
+                      <span className="mono text-body-md text-primary text-right">
+                        {money(item.value, analysis.currency || 'MYR', analysis.unit)}
+                      </span>
+                      <span className="hidden sm:block">
+                        <TrustBadge trust={item.trust} checkedBy={item.checked_by} />
+                      </span>
+                      <span className="hidden sm:flex items-center gap-xs text-body-sm
+                                       text-secondary mono">
+                        {item.page != null
+                          ? <><Icon name="my_location" className="text-[14px]" />p.{item.page}</>
+                          : <em className="text-on-surface-variant not-italic">no cell</em>}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </Card>
+
+          <Card title="Ratios trace too" icon="account_tree">
+            <p className="text-body-md text-on-surface-variant">
+              Provenance survives one level of arithmetic — a ratio boxes every cell it
+              was built from.
+            </p>
+            <div className="flex flex-wrap gap-sm mt-md">
+              {RATIO_ORDER.map(key => {
+                const withheld = analysis.ratios[key] == null
                 return (
                   <button
-                    key={item.canonical_key}
-                    className={`item-row ${active ? 'active' : ''}`}
-                    onClick={() => focusItem(item.canonical_key)}
+                    key={key}
+                    disabled={withheld}
+                    onClick={() => focusRatio(key)}
+                    className={`inline-flex items-center gap-sm px-md py-sm rounded border
+                      text-body-sm transition-colors
+                      ${withheld
+                        ? 'border-dashed border-outline-variant text-on-surface-variant cursor-not-allowed'
+                        : 'border-hairline text-on-surface hover:border-secondary hover:text-secondary'}`}
                   >
-                    <span className="item-name">
-                      <b>{item.label_as_printed || item.canonical_key.replace(/_/g, ' ')}</b>
-                      <small>
-                        {item.canonical_key}
-                        {item.checked_by?.length
-                          ? ` · cleared by ${item.checked_by.length} check${item.checked_by.length > 1 ? 's' : ''}`
-                          : item.derived ? ` · ${item.derivation}` : ''}
-                      </small>
-                    </span>
-                    <span className="mono item-value">
-                      {money(item.value, analysis.currency || 'MYR', analysis.unit)}
-                    </span>
-                    <TrustBadge trust={item.trust} checkedBy={item.checked_by} />
-                    <span className="item-source">
-                      {item.page != null
-                        ? <><Icon name="my_location" />p.{item.page}</>
-                        : <em className="muted">no cell</em>}
-                    </span>
+                    {RATIO_LABELS[key]}
+                    <b className="mono">{fmtRatio(key, analysis.ratios[key])}</b>
                   </button>
                 )
               })}
             </div>
-          )}
-
-          <div className="ratio-trace">
-            <h4>Ratios trace too</h4>
-            <p>Provenance survives one level of arithmetic — a ratio boxes every cell it was built from.</p>
-            <div className="ratio-chips">
-              {RATIO_ORDER.map(key => (
-                <button
-                  key={key}
-                  className={`chip ${analysis.ratios[key] == null ? 'chip-disabled' : ''}`}
-                  disabled={analysis.ratios[key] == null}
-                  onClick={() => focusRatio(key)}
-                >
-                  {RATIO_LABELS[key]}
-                  <b className="mono">{fmtRatio(key, analysis.ratios[key])}</b>
-                </button>
-              ))}
-            </div>
-          </div>
+          </Card>
         </div>
 
-        <div className="pane pane-source">
+        <div className={`lg:col-span-5 lg:sticky lg:top-0
+                         ${mobileTab === 'source' ? '' : 'hidden lg:block'}`}>
           <SourcePane />
         </div>
-      </section>
+      </div>
 
       {analysis.quarantined.length > 0 && (
-        <Card title="Quarantined figures" subtitle="Failed reconciliation. Withheld from every downstream calculation." icon="gpp_bad">
-          <div className="quarantine-list">
+        <Card
+          title="Quarantined figures"
+          subtitle="Failed reconciliation. Withheld from every downstream calculation."
+          icon="gpp_bad"
+          bodyClassName=""
+        >
+          <div className="divide-y divide-hairline">
             {analysis.quarantined.map(key => {
               const item = analysis.line_items.find(i => i.canonical_key === key)
               return (
-                <div className="quarantine-row" key={key}>
+                <div key={key} className="flex items-center gap-md px-lg py-sm">
                   <StatusPill status="FAIL" />
-                  <span>{item?.label_as_printed || key.replace(/_/g, ' ')}</span>
+                  <span className="flex-1 min-w-0 truncate text-body-md text-on-surface">
+                    {item?.label_as_printed || key.replace(/_/g, ' ')}
+                  </span>
                   <SourceLink page={item?.page ?? null} onClick={() => focusItem(key)}>
-                    <span className="mono">{money(item?.value ?? null, analysis.currency || 'MYR', analysis.unit)}</span>
+                    {money(item?.value ?? null, analysis.currency || 'MYR', analysis.unit)}
                   </SourceLink>
                 </div>
               )

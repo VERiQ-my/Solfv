@@ -14,6 +14,10 @@ import { percent, ratio as fmtRatio, signedPercent } from '../lib/format'
 import { useSession } from '../state'
 import type { BenchmarkRow } from '../types'
 
+const VERDICT_EDGE: Record<string, string> = {
+  BETTER: 'border-l-success', IN_LINE: 'border-l-secondary', WORSE: 'border-l-danger',
+}
+
 export default function Benchmark() {
   const { analysis } = useSession()
   if (!analysis) return null
@@ -22,9 +26,9 @@ export default function Benchmark() {
   const peerCount = rows[0]?.peer_count ?? 0
 
   return (
-    <div className="content">
+    <div className="space-y-xl">
       <PageIntro
-        eyebrow={analysis.ticker ? `${analysis.ticker} · BURSA MALAYSIA` : 'BURSA MALAYSIA'}
+        eyebrow={analysis.ticker ? `${analysis.ticker} · Bursa Malaysia` : 'Bursa Malaysia'}
         title="Sector benchmark"
         lede={
           peerCount
@@ -43,46 +47,41 @@ export default function Benchmark() {
         </Card>
       ) : (
         <>
-          <section className="bench-summary">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-gutter">
             {(['BETTER', 'IN_LINE', 'WORSE'] as const).map(verdict => (
-              <article key={verdict} className={`bench-tile bench-${verdict.toLowerCase()}`}>
-                <StatusPill status={verdict} />
-                <strong>{rows.filter(r => r.verdict === verdict).length}</strong>
-                <p>of {rows.length} ratios</p>
+              <article
+                key={verdict}
+                className={`card card-hover border-l-4 ${VERDICT_EDGE[verdict]}`}
+              >
+                <div className="card-body space-y-sm">
+                  <StatusPill status={verdict} />
+                  <strong className="mono block text-display-lg leading-none text-primary">
+                    {rows.filter(r => r.verdict === verdict).length}
+                  </strong>
+                  <p className="text-body-sm text-on-surface-variant">of {rows.length} ratios</p>
+                </div>
               </article>
             ))}
-          </section>
+          </div>
 
-          <div className="bench-list">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-gutter">
             {rows.map(row => <BenchRow key={row.metric} row={row} />)}
           </div>
         </>
       )}
 
-      <Card title="What the peer set is" icon="dataset" className="method-card">
-        <div className="method-grid">
-          <div>
-            <b>Cached, not live</b>
-            <p>
-              The peer pull runs once during the build and the result is committed.
-              The app reads that file, so a rate-limited market data API at demo time
-              costs us nothing.
-            </p>
-          </div>
-          <div>
-            <b>Median, not mean</b>
-            <p>
-              One distressed peer would drag a mean far enough to flatter this
-              company. The median holds up on a small sector sample.
-            </p>
-          </div>
-          <div>
-            <b>Direction-aware</b>
-            <p>
-              Lower gearing is better; lower interest cover is worse. Each verdict is
-              read against the direction that ratio should move.
-            </p>
-          </div>
+      <Card title="What the peer set is" icon="dataset">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-lg">
+          {[
+            ['Cached, not live', 'The peer pull runs once during the build and the result is committed. The app reads that file, so a rate-limited market data API at demo time costs us nothing.'],
+            ['Median, not mean', 'One distressed peer would drag a mean far enough to flatter this company. The median holds up on a small sector sample.'],
+            ['Direction-aware', 'Lower gearing is better; lower interest cover is worse. Each verdict is read against the direction that ratio should move.'],
+          ].map(([title, body]) => (
+            <div key={title}>
+              <b className="block text-body-md text-primary">{title}</b>
+              <p className="text-body-sm text-on-surface-variant mt-xs">{body}</p>
+            </div>
+          ))}
         </div>
       </Card>
     </div>
@@ -99,11 +98,11 @@ function BenchRow({ row }: { row: BenchmarkRow }) {
   const medianWidth = `${Math.min(100, (Math.abs(row.sector_median) / ceiling) * 100)}%`
 
   return (
-    <article className={`bench-row bench-${row.verdict.toLowerCase()}`}>
-      <header>
-        <div>
-          <b>{row.label}</b>
-          <small>
+    <article className={`card card-hover border-l-4 ${VERDICT_EDGE[row.verdict]}`}>
+      <header className="card-header">
+        <div className="min-w-0">
+          <b className="block text-title-md text-primary truncate">{row.label}</b>
+          <small className="block text-body-sm text-on-surface-variant">
             {row.higher_is_better ? 'Higher is better' : 'Lower is better'}
             {row.percentile != null && ` · ${row.percentile.toFixed(0)}th percentile`}
           </small>
@@ -111,29 +110,36 @@ function BenchRow({ row }: { row: BenchmarkRow }) {
         <StatusPill status={row.verdict} />
       </header>
 
-      <div className="bench-bars">
-        <div className="bench-bar">
-          <span className="bench-key">This company</span>
-          <div className="bench-track"><i className="bench-fill company" style={{ width: companyWidth }} /></div>
-          <b className="mono">{format(row.company)}</b>
-        </div>
-        <div className="bench-bar">
-          <span className="bench-key">Sector median</span>
-          <div className="bench-track"><i className="bench-fill median" style={{ width: medianWidth }} /></div>
-          <b className="mono">{format(row.sector_median)}</b>
-        </div>
+      <div className="card-body space-y-md">
+        {([
+          ['This company', companyWidth, format(row.company), 'bg-primary'],
+          ['Sector median', medianWidth, format(row.sector_median), 'bg-secondary'],
+        ] as const).map(([key, width, value, fill]) => (
+          <div key={key} className="grid grid-cols-[7.5rem_1fr_auto] items-center gap-sm">
+            <span className="text-body-sm text-on-surface-variant">{key}</span>
+            <div className="h-2 rounded-full bg-surface-container-high overflow-hidden">
+              <div className={`h-full rounded-full ${fill} transition-[width] duration-500`}
+                   style={{ width }} />
+            </div>
+            <b className="mono text-body-md text-primary text-right tabular-nums">{value}</b>
+          </div>
+        ))}
       </div>
 
       {row.gap_pct != null && (
-        <footer>
+        <footer className="px-lg py-sm border-t border-hairline flex items-center gap-xs
+                           text-body-sm text-on-surface-variant">
           {/* Verdict icon, not a trend arrow: for a lower-is-better ratio a
               negative gap is the good outcome, and an up-arrow beside "−99.9%"
               reads as a contradiction. */}
-          <Icon name={
-            row.verdict === 'WORSE' ? 'thumb_down'
-              : row.verdict === 'BETTER' ? 'thumb_up' : 'drag_handle'
-          } />
-          {signedPercent(row.gap_pct)} against the median of {row.peer_count} peers
+          <Icon
+            name={row.verdict === 'WORSE' ? 'thumb_down'
+              : row.verdict === 'BETTER' ? 'thumb_up' : 'drag_handle'}
+            className={`text-[16px] ${row.verdict === 'WORSE' ? 'text-danger'
+              : row.verdict === 'BETTER' ? 'text-success' : ''}`}
+          />
+          <span className="mono">{signedPercent(row.gap_pct)}</span>
+          against the median of {row.peer_count} peers
         </footer>
       )}
     </article>

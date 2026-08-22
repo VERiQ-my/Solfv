@@ -76,6 +76,11 @@ is in rather than implying an account system that is not there.
 — this gate is the frontend's alone, and it is a prototype's gate. Anyone who
 can reach port 8000 can reach the engine directly.
 
+Both screens land on the **Command Center**, which aggregates the persisted
+audit history and therefore has something to say before a single document is
+inserted. The Analysis Lab's own insert panel is the empty state for a library
+with nothing in it.
+
 Signing out purges the tab: every in-memory document goes with it, and the
 engine sessions behind them expire on their own TTL. Signing in as someone else
 starts from an empty library rather than inheriting the last analyst's queue.
@@ -178,16 +183,23 @@ nothing — a missing prior year is our gap, not evidence against the figure.
 
 ## What the screens do
 
+Six destinations in the sidebar. Analysis carries the engine's lenses as tabs,
+because each is a view of one selected document and means nothing without it.
+
 | Screen | Purpose |
 |---|---|
-| **Log in / Sign up** | The way in. Both land on the Analysis dashboard. See [Accounts](#accounts). |
-| **Analysis** | The hub. Every document finance inserted, queued and reconciled, each with its own session and purge timer. Selecting one opens its figures, click-to-source provenance, and the query bar. |
-| **Overview** | One document's verdict: reconciliation results with expected vs actual, the ratio pack, and the balance sheet with every figure clickable. |
-| **Say–Do Gap** | Management's narrative claims tested against the reconciled figures. |
-| **Sector benchmark** | Each ratio against its Bursa sector median. |
-| **Credit risk** | Altman Z with per-component driver contributions. |
-| **Privacy & session** | The detection ledger and the live purge countdown. |
-| **Metering** | Per-document pricing and the Solana settlement gate. |
+| **Log in / Sign up** | The way in. Both land on the Command Center. See [Accounts](#accounts). |
+| **Dashboard** — Command Center | Every reconciliation ever run, aggregated from the persisted audit history. Verdict totals, distress distribution, PII counts. |
+| **Analysis** — Analysis Lab | The hub. Every document finance inserted, queued and reconciled, each with its own session and purge timer. |
+| ↳ Overview | One document's verdict: reconciliation results with expected vs actual, and the ratio pack. |
+| ↳ Provenance | Every figure beside the source cell it was read from, click to box it on the page. |
+| ↳ Say–Do Gap | Management's narrative claims tested against the reconciled figures. |
+| ↳ Sector Benchmark | Each ratio against its Bursa sector median. |
+| ↳ Credit Risk | Altman Z with per-component driver contributions. |
+| **Market Intelligence** | The engine's market feed for the sector the document sits in. |
+| **Expense Management** | The selected document's cost structure. |
+| **Solana Investments** | The payment surface and the settlement gate. |
+| **Privacy Settings** | The detection ledger and the live purge countdown. |
 
 ---
 

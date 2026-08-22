@@ -4,14 +4,14 @@
  *  the only rule that belongs to the form and not to the account — nothing
  *  downstream has two passwords to compare.
  *
- *  On success the user lands on the dashboard, except where Supabase is set to
- *  require email confirmation: then there is no session to land with, and the
- *  honest move is to say so and send them to the log-in screen.
+ *  On success the user lands on the Command Center, except where Supabase is
+ *  set to require email confirmation: then there is no session to land with,
+ *  and the honest move is to say so and send them to the log-in screen.
  */
 
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { AuthLayout, Field } from '../components/AuthLayout'
+import { Alert, AuthLayout, Field } from '../components/AuthLayout'
 import { Icon, Meter } from '../components/ui'
 import { AuthError, MIN_PASSWORD, useAuth } from '../lib/auth'
 import type { FieldErrors } from '../lib/auth'
@@ -29,6 +29,11 @@ function strength(password: string): { score: number; label: string; tone: strin
   if (score < 0.55) return { score, label: 'Weak', tone: 'bad' }
   if (score < 0.78) return { score, label: 'Fair', tone: 'warn' }
   return { score, label: 'Strong', tone: 'good' }
+}
+
+const STRENGTH_INK: Record<string, string> = {
+  good: 'text-success', warn: 'text-warning',
+  bad: 'text-danger', muted: 'text-on-surface-variant',
 }
 
 export default function SignUp({
@@ -74,28 +79,28 @@ export default function SignUp({
       footer={
         <>
           Already have an account?{' '}
-          <button type="button" className="btn text" onClick={onLogIn}>Log in</button>
+          <button type="button" className="btn-ghost !px-xs !py-0" onClick={onLogIn}>
+            Log in
+          </button>
         </>
       }
     >
       {notice && (
-        <div className="alert alert-note">
-          <Icon name="mark_email_read" />
-          <div>
-            <p>{notice}</p>
-            <button type="button" className="btn text" onClick={onLogIn}>Go to log in</button>
-          </div>
-        </div>
+        <Alert tone="info" icon="mark_email_read">
+          {notice}
+          <button type="button" className="btn-ghost !px-0 !py-0 mt-xs block" onClick={onLogIn}>
+            Go to log in
+          </button>
+        </Alert>
       )}
 
       {error && !Object.keys(field).length && (
-        <div className="alert alert-fail">
-          <Icon name="error" />
-          <div><b>Could not create that account.</b><p>{error}</p></div>
-        </div>
+        <Alert tone="danger" icon="error" title="Could not create that account.">
+          {error}
+        </Alert>
       )}
 
-      <form className="auth-form" onSubmit={submit} noValidate>
+      <form className="space-y-md" onSubmit={submit} noValidate>
         <Field
           label="Full name"
           value={name}
@@ -116,27 +121,30 @@ export default function SignUp({
           placeholder="analyst@bank.com.my"
           disabled={busy}
         />
-        <Field
-          label="Password"
-          type="password"
-          value={password}
-          onChange={setPassword}
-          error={field.password}
-          hint={`At least ${MIN_PASSWORD} characters.`}
-          autoComplete="new-password"
-          placeholder="••••••••"
-          disabled={busy}
-        />
-
-        {password && (
-          <div className="pw-strength">
-            <Meter value={meter.score} tone={meter.tone} label={`Password strength: ${meter.label}`} />
-            <small className={meter.tone === 'good' ? 'good' : meter.tone === 'bad' ? 'bad' : 'muted'}>
-              {meter.label}
-            </small>
-          </div>
-        )}
-
+        <div>
+          <Field
+            label="Password"
+            type="password"
+            value={password}
+            onChange={setPassword}
+            error={field.password}
+            hint={password ? undefined : `At least ${MIN_PASSWORD} characters.`}
+            autoComplete="new-password"
+            placeholder="••••••••"
+            disabled={busy}
+          />
+          {password && !field.password && (
+            <div className="flex items-center gap-sm mt-xs">
+              <Meter
+                value={meter.score} tone={meter.tone}
+                label={`Password strength: ${meter.label}`}
+              />
+              <small className={`text-label-md shrink-0 ${STRENGTH_INK[meter.tone]}`}>
+                {meter.label}
+              </small>
+            </div>
+          )}
+        </div>
         <Field
           label="Confirm password"
           type="password"
@@ -148,10 +156,10 @@ export default function SignUp({
           disabled={busy}
         />
 
-        <button className="btn primary full auth-submit" type="submit" disabled={busy}>
+        <button className="btn-primary btn-full !py-sm" type="submit" disabled={busy}>
           {busy
-            ? <><span className="spinner small" />Creating…</>
-            : <><Icon name="person_add" />Create account</>}
+            ? <><span className="spinner" />Creating…</>
+            : <><Icon name="person_add" className="text-[16px]" />Create account</>}
         </button>
       </form>
     </AuthLayout>
